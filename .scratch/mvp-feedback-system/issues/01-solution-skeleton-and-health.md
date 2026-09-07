@@ -4,13 +4,13 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `dotnet build` and `dotnet test` succeed on a fresh checkout (integration tests require Docker Desktop running)
-- [ ] `GET /health` returns 200 with no authentication
-- [ ] The integration harness boots the full application against a real PostgreSQL container and the smoke test passes
-- [ ] Example configuration files (appsettings example, .env example) document every setting the app reads so far, with safe placeholders
-- [ ] The compose file provides the PostgreSQL 17 service, exposed to localhost only
-- [ ] Console structured logging configured; no secrets logged
+- [x] `dotnet build` and `dotnet test` succeed on a fresh checkout (integration tests require Docker Desktop running)
+- [x] `GET /health` returns 200 with no authentication
+- [x] The integration harness boots the full application against a real PostgreSQL container and the smoke test passes
+- [x] Example configuration files (appsettings example, .env example) document every setting the app reads so far, with safe placeholders
+- [x] The compose file provides the PostgreSQL 17 service, exposed to localhost only
+- [x] Console structured logging configured; no secrets logged
 
 Parent spec: `.scratch/mvp-feedback-system/spec.md`
