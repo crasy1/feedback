@@ -4,12 +4,12 @@
 
 **Blocked by:** 01.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Player, Feedback, Feedback Comment persist with all fields from the domain model doc; types/statuses stored as strings; timestamps in UTC
-- [ ] Unique index on Player SteamID; specified indexes on Feedback and Feedback Comment exist
-- [ ] Initial migration generated and inspected; auto-apply on startup controlled by a configuration flag (default on)
-- [ ] Integration test verifies the schema exists after startup on a fresh Testcontainers database (an entity round-trips through the real provider)
-- [ ] One Steam account maps to exactly one Player — the unique constraint holds at the database level
+- [x] Player, Feedback, Feedback Comment persist with all fields from the domain model doc; types/statuses stored as strings; timestamps in UTC
+- [x] Unique index on Player SteamID; specified indexes on Feedback and Feedback Comment exist
+- [x] Initial migration generated and inspected; auto-apply on startup controlled by a configuration flag (default on)
+- [x] Integration test verifies the schema exists after startup on a fresh Testcontainers database (an entity round-trips through the real provider)
+- [x] One Steam account maps to exactly one Player — the unique constraint holds at the database level
 
 Parent spec: `.scratch/mvp-feedback-system/spec.md`
