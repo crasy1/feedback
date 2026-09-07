@@ -12,3 +12,5 @@ public record CreateFeedbackRequest(
     string? Locale,
     string? Map,
     string? Character);
+
+public record CreateCommentRequest(string? Content);

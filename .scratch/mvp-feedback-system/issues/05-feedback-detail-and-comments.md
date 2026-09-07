@@ -4,11 +4,11 @@
 
 **Blocked by:** 04.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The owner gets full detail including comments; a foreign or missing id → 404
-- [ ] An owner comment persists with Author Type Player; commenting on another Player's Feedback → 404
-- [ ] Comment length limit enforced; per-Player rate limit protects the comment endpoint
-- [ ] Cross-ownership covered by tests: a Player cannot read or comment on another Player's Feedback
+- [x] The owner gets full detail including comments; a foreign or missing id → 404
+- [x] An owner comment persists with Author Type Player; commenting on another Player's Feedback → 404
+- [x] Comment length limit enforced; per-Player rate limit protects the comment endpoint
+- [x] Cross-ownership covered by tests: a Player cannot read or comment on another Player's Feedback
 
 Parent spec: `.scratch/mvp-feedback-system/spec.md`

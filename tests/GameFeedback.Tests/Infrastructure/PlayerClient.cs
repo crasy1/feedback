@@ -7,9 +7,9 @@ namespace GameFeedback.Tests.Infrastructure;
 /// <summary>测试中模拟游戏客户端完成 Steam 登录并取得带 Bearer 令牌的 HttpClient。</summary>
 public static class PlayerClient
 {
-    /// <summary>生成 17 位纯数字的 SteamID64 形状唯一值，避免共享数据库串扰。</summary>
+    /// <summary>生成 17 位纯数字的 SteamID64 形状唯一值（前缀保证大于 SteamID64 最小值），避免共享数据库串扰。</summary>
     public static string UniqueSteamId() =>
-        "7656" + new string(Guid.NewGuid().ToByteArray().Select(b => (char)('0' + b % 10)).Take(13).ToArray());
+        "76561198" + new string(Guid.NewGuid().ToByteArray().Select(b => (char)('0' + b % 10)).Take(9).ToArray());
     public static async Task<string> LoginAsync(HttpClient client, FakeSteamHandler steam, string steamId)
     {
         steam.EnqueueTicketResponse(FakeSteamHandler.TicketOk(steamId));

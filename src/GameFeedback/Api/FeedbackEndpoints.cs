@@ -69,6 +69,74 @@ public static class FeedbackEndpoints
             return Results.Ok(items.Select(FeedbackService.ToDto));
         });
 
+        group.MapGet("/{id:int}", async (
+            int id,
+            ClaimsPrincipal user,
+            FeedbackService feedbacks,
+            CancellationToken cancellationToken) =>
+        {
+            var steamId = user.FindFirst("sub")?.Value;
+            if (steamId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var playerId = await feedbacks.ResolvePlayerIdAsync(steamId, cancellationToken);
+            if (playerId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            // 所有权在查询层强制：他人或缺失一律 404。
+            var feedback = await feedbacks.GetOwnAsync(playerId.Value, id, cancellationToken);
+            if (feedback is null)
+            {
+                return Results.NotFound();
+            }
+
+            var comments = feedback.Comments
+                .Select(c => new CommentDto(c.Id, c.AuthorType.ToString(), c.Content, c.CreatedAt))
+                .ToList();
+            return Results.Ok(FeedbackService.ToDetailDto(feedback, comments));
+        });
+
+        group.MapPost("/{id:int}/comments", async (
+            int id,
+            CreateCommentRequest? request,
+            ClaimsPrincipal user,
+            FeedbackService feedbacks,
+            CancellationToken cancellationToken) =>
+        {
+            var steamId = user.FindFirst("sub")?.Value;
+            if (steamId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var content = request?.Content;
+            var validationError = FeedbackService.ValidateComment(content);
+            if (validationError is not null)
+            {
+                return Results.Problem(statusCode: 400, title: "请求无效", detail: validationError);
+            }
+
+            var playerId = await feedbacks.ResolvePlayerIdAsync(steamId, cancellationToken);
+            if (playerId is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            // 只有属主能评论：他人或缺失一律 404。
+            var feedback = await feedbacks.GetOwnAsync(playerId.Value, id, cancellationToken);
+            if (feedback is null)
+            {
+                return Results.NotFound();
+            }
+
+            var comment = await feedbacks.AddPlayerCommentAsync(playerId.Value, id, content!, cancellationToken);
+            return Results.Created($"/api/feedback/{id}", new CommentDto(comment.Id, comment.AuthorType.ToString(), comment.Content, comment.CreatedAt));
+        }).RequireRateLimiting("player-comments");
+
         return app;
     }
 }

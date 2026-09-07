@@ -85,6 +85,14 @@ builder.Services.AddRateLimiter(options =>
             Window = TimeSpan.FromMinutes(10),
             QueueLimit = 0,
         }));
+    options.AddPolicy("player-comments", context => RateLimitPartition.GetFixedWindowLimiter(
+        GetPlayerPartitionKey(context),
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = rateLimit.CommentsPer10Minutes,
+            Window = TimeSpan.FromMinutes(10),
+            QueueLimit = 0,
+        }));
 });
 
 static string GetPlayerPartitionKey(HttpContext context) =>

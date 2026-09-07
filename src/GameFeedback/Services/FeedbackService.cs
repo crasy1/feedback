@@ -82,6 +82,41 @@ public class FeedbackService(AppDbContext db)
             .Take(MineMaxItems)
             .ToListAsync(cancellationToken);
 
+    /// <summary>
+    /// 读取属主玩家的单条反馈（含评论）。
+    /// 不存在或不属于该玩家一律返回 null——对外表现为 404。
+    /// </summary>
+    public Task<Feedback?> GetOwnAsync(int playerId, int feedbackId, CancellationToken cancellationToken) =>
+        db.Feedbacks
+            .Include(f => f.Comments.OrderBy(c => c.CreatedAt).ThenBy(c => c.Id))
+            .SingleOrDefaultAsync(f => f.Id == feedbackId && f.PlayerId == playerId, cancellationToken);
+
+    /// <summary>校验评论内容；返回错误消息，null 表示通过。</summary>
+    public static string? ValidateComment(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content) || content.Length > 5_000)
+        {
+            return "comment 长度必须在 1–5,000 之间";
+        }
+        return null;
+    }
+
+    /// <summary>玩家在自己的反馈上追加评论。所有权由调用方通过 GetOwnAsync 保证。</summary>
+    public async Task<FeedbackComment> AddPlayerCommentAsync(int playerId, int feedbackId, string content, CancellationToken cancellationToken)
+    {
+        var comment = new FeedbackComment
+        {
+            FeedbackId = feedbackId,
+            AuthorType = CommentAuthorType.Player,
+            PlayerId = playerId,
+            Content = content,
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.FeedbackComments.Add(comment);
+        await db.SaveChangesAsync(cancellationToken);
+        return comment;
+    }
+
     public static FeedbackDto ToDto(Feedback feedback) => new(
         feedback.Id,
         feedback.Type.ToString(),
@@ -96,4 +131,20 @@ public class FeedbackService(AppDbContext db)
         feedback.Map,
         feedback.Character,
         feedback.CreatedAt);
+
+    public static FeedbackDetailDto ToDetailDto(Feedback feedback, IReadOnlyList<CommentDto> comments) => new(
+        feedback.Id,
+        feedback.Type.ToString(),
+        feedback.Title,
+        feedback.Content,
+        feedback.Status.ToString(),
+        feedback.GameVersion,
+        feedback.BuildNumber,
+        feedback.OperatingSystem,
+        feedback.Gpu,
+        feedback.Locale,
+        feedback.Map,
+        feedback.Character,
+        feedback.CreatedAt,
+        comments);
 }
