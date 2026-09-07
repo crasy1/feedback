@@ -4,12 +4,12 @@
 
 **Blocked by:** 02.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A seeded admin can log in and out via the admin UI; the session uses a secure HTTP-only cookie
-- [ ] Seeding runs only when no admin account exists; existing installs are never modified
-- [ ] An unauthenticated request to `/admin` is redirected to the login page
-- [ ] A valid Player Access Token presented to `/admin` is rejected
-- [ ] The admin login page renders with Simplified Chinese text
+- [x] A seeded admin can log in and out via the admin UI; the session uses a secure HTTP-only cookie
+- [x] Seeding runs only when no admin account exists; existing installs are never modified
+- [x] An unauthenticated request to `/admin` is redirected to the login page
+- [x] A valid Player Access Token presented to `/admin` is rejected
+- [x] The admin login page renders with Simplified Chinese text
 
 Parent spec: `.scratch/mvp-feedback-system/spec.md`

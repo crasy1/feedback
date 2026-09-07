@@ -1,0 +1,39 @@
+@page
+@model GameFeedback.RazorPages.Admin.LoginModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>管理员登录 - 游戏反馈系统</title>
+    <style>
+        body { font-family: "Segoe UI", system-ui, sans-serif; background: #f3f4f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #fff; padding: 2rem 2.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.08); width: 320px; }
+        h1 { font-size: 1.25rem; margin: 0 0 1.25rem; }
+        label { display: block; margin: .75rem 0 .25rem; font-size: .875rem; color: #374151; }
+        input { width: 100%; box-sizing: border-box; padding: .5rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: .875rem; }
+        button { margin-top: 1.25rem; width: 100%; padding: .6rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; font-size: .9rem; cursor: pointer; }
+        button:hover { background: #1d4ed8; }
+        .error { color: #dc2626; font-size: .875rem; margin-top: .75rem; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>游戏反馈系统 · 管理员登录</h1>
+        <form method="post">
+            <label asp-for="Email">邮箱</label>
+            <input asp-for="Email" autocomplete="username" />
+            <label asp-for="Password">密码</label>
+            <input asp-for="Password" type="password" autocomplete="current-password" />
+            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+            {
+                <p class="error">@Model.ErrorMessage</p>
+            }
+            <button type="submit">登录</button>
+        </form>
+    </div>
+</body>
+</html>

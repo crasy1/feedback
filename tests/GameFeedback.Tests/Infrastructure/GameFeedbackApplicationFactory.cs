@@ -24,6 +24,8 @@ public sealed class GameFeedbackApplicationFactory(string connectionString, Http
         builder.UseSetting("Jwt:Issuer", TestIssuer);
         builder.UseSetting("Jwt:Audience", TestAudience);
         builder.UseSetting("Jwt:SigningKey", TestSigningKey);
+        builder.UseSetting("Admin:SeedEmail", "admin@test.local");
+        builder.UseSetting("Admin:SeedPassword", "admin-password-123");
 
         if (extraSettings is not null)
         {

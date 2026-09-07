@@ -4,7 +4,10 @@ using GameFeedback.Api;
 using GameFeedback.Components;
 using GameFeedback.Data;
 using GameFeedback.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -31,6 +34,11 @@ builder.Services.AddOptions<JwtOptions>()
 builder.Services.AddOptions<RateLimitOptions>()
     .Bind(builder.Configuration.GetSection("RateLimit"));
 
+builder.Services.AddOptions<AdminOptions>()
+    .Bind(builder.Configuration.GetSection("Admin"))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+
 builder.Services.AddHttpClient("Steam", client =>
 {
     client.BaseAddress = new Uri("https://api.steampowered.com");
@@ -41,9 +49,22 @@ builder.Services.AddScoped<SteamAuthService>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<FeedbackService>();
+builder.Services.AddScoped<AdminSeeder>();
+
+// 管理员：ASP.NET Core Identity + Cookie（与玩家 JWT 是两套独立身份体系）。
+builder.Services.AddIdentityCore<IdentityUser>(options =>
+{
+    options.Password.RequiredLength = 8;
+    options.Password.RequireDigit = false;
+    options.Password.RequireUppercase = false;
+    options.Password.RequireLowercase = false;
+    options.Password.RequireNonAlphanumeric = false;
+})
+    .AddSignInManager()
+    .AddEntityFrameworkStores<AppDbContext>();
 
 builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddAuthentication(IdentityConstants.ApplicationScheme)
     .AddJwtBearer(options =>
     {
         var jwt = builder.Configuration.GetSection("Jwt").Get<JwtOptions>()
@@ -61,7 +82,17 @@ builder.Services
             NameClaimType = "sub",
             ClockSkew = TimeSpan.FromSeconds(30),
         };
-    });
+    })
+    .AddIdentityCookies();
+
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.LoginPath = "/admin/login";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+});
+
+builder.Services.AddRazorPages();
 
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy("Player", policy => policy.RequireAuthenticatedUser().AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme));
@@ -112,6 +143,13 @@ if (app.Configuration.GetValue("Database:AutoMigrate", defaultValue: true))
     }
 }
 
+// 种子首个管理员（仅在没有任何管理员时执行）。
+using (var scope = app.Services.CreateScope())
+{
+    var seeder = scope.ServiceProvider.GetRequiredService<AdminSeeder>();
+    await seeder.SeedAsync();
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -131,6 +169,22 @@ app.UseAuthorization();
 // 限流在认证之后：按玩家（sub claim）分区需要已填充的 User。
 app.UseRateLimiter();
 
+// /admin 门禁：两套身份体系相互隔离——玩家 JWT 不满足 Identity Cookie，
+// 未认证一律重定向到登录页（HTTP 层强制，与组件层防护互为纵深）。
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path;
+    if (path.StartsWithSegments("/admin")
+        && !path.StartsWithSegments("/admin/login")
+        && !path.StartsWithSegments("/admin/logout")
+        && context.User.Identity?.IsAuthenticated != true)
+    {
+        await context.ChallengeAsync(IdentityConstants.ApplicationScheme);
+        return;
+    }
+    await next(context);
+});
+
 // 防伪校验只作用于浏览器端 Blazor 页面；/api 走 JWT（无 Cookie），对 CSRF 免疫。
 app.UseWhen(
     context => !context.Request.Path.StartsWithSegments("/api"),
@@ -142,6 +196,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapAuthEndpoints();
 app.MapFeedbackEndpoints();
+app.MapRazorPages();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
