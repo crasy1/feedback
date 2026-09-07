@@ -1,0 +1,12 @@
+.git
+.env
+bin/
+obj/
+**/bin/
+**/obj/
+tests/
+docs/
+.scratch/
+*.md
+docker-compose.yml
+Dockerfile

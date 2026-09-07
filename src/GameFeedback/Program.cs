@@ -6,6 +6,7 @@ using GameFeedback.Data;
 using GameFeedback.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
@@ -134,7 +135,18 @@ static string GetPlayerPartitionKey(HttpContext context) =>
     ?? context.Connection.RemoteIpAddress?.ToString()
     ?? "unknown";
 
+// 反向代理（Cloudflare Tunnel / Nginx / Caddy）之后需转发头还原客户端 IP 与协议。
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 var app = builder.Build();
+
+// 必须最先执行，限流按 IP 分区才能取到真实客户端地址。
+app.UseForwardedHeaders();
 
 // 启动时自动应用迁移（Database__AutoMigrate 可关闭）。
 if (app.Configuration.GetValue("Database:AutoMigrate", defaultValue: true))

@@ -16,5 +16,25 @@ services:
       retries: 10
     restart: unless-stopped
 
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=gamefeedback;Username=gamefeedback;Password=${POSTGRES_PASSWORD}
+      Steam__ApiKey: ${STEAM_API_KEY:-unset}
+      Steam__AppId: ${STEAM_APP_ID:-unset}
+      Jwt__Issuer: ${JWT_ISSUER:-GameFeedback}
+      Jwt__Audience: ${JWT_AUDIENCE:-GameFeedbackClient}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:?请在 .env 中设置至少 32 字符的 JWT_SIGNING_KEY}
+      Admin__SeedEmail: ${ADMIN_SEED_EMAIL:-admin@example.com}
+      Admin__SeedPassword: ${ADMIN_SEED_PASSWORD:?请在 .env 中设置 ADMIN_SEED_PASSWORD}
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+    ports:
+      # 仅绑定本机回环：公网入口由 Cloudflare Tunnel / Nginx / Caddy 承担
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
 volumes:
   postgres-data:
