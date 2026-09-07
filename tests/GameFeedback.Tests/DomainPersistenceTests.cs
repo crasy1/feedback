@@ -12,8 +12,8 @@ public sealed class DomainPersistenceTests(IntegrationTestFixture fixture)
     private async Task<AppDbContext> CreateContextAsync()
     {
         // 触发应用启动（自动迁移在此执行），再从容器解析 DbContext。
-        _ = fixture.Factory.CreateClient();
-        var scope = fixture.Factory.Services.CreateScope();
+        _ = fixture.DefaultFactory.CreateClient();
+        var scope = fixture.DefaultFactory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.Database.CanConnectAsync();
         return db;

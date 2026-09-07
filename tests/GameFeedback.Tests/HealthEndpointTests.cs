@@ -9,7 +9,7 @@ public sealed class HealthEndpointTests(IntegrationTestFixture fixture)
     [Fact]
     public async Task Health_returns_ok_without_authentication()
     {
-        var client = fixture.Factory.CreateClient();
+        var client = fixture.DefaultFactory.CreateClient();
 
         var response = await client.GetAsync("/health");
 
