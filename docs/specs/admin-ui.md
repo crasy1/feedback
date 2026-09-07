@@ -33,6 +33,8 @@ Support basic filtering by:
 - type
 - game version
 
+Paginated via `page` / `pageSize` query parameters, default 50 per page, newest first.
+
 ## Feedback detail
 
 Show:
@@ -52,5 +54,7 @@ Admins must be able to:
 
 - reply
 - change status
+
+Admins cannot edit or delete any content in v1; moderation is out of scope.
 
 Because the admin UI runs server-side, prefer calling application services directly instead of making an unnecessary HTTP request back into the same application.

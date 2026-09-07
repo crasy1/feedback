@@ -30,6 +30,8 @@ Authorization: Bearer <jwt>
 
 Do not call Steam again for every feedback request.
 
+On each login the server also fetches `ISteamUser/GetPlayerSummaries` to refresh `SteamName` / `AvatarUrl`. This is best effort: a failure to fetch the profile does not fail the login; the stored values are kept (or left empty on first login).
+
 ### Administrators
 
 Administrators use normal web authentication:
@@ -37,6 +39,8 @@ Administrators use normal web authentication:
 - ASP.NET Core Identity
 - secure HTTP-only cookie
 - admin UI under `/admin`
+
+On startup, if no admin account exists, one is seeded from `Admin__SeedEmail` / `Admin__SeedPassword` configuration. Existing installs are never modified; there is no registration page.
 
 A Steam player JWT must never authorize administrator operations.
 
@@ -91,7 +95,7 @@ Use `IHttpClientFactory`. Configure timeout, API key, AppID and identity through
 
 ## JWT design
 
-Use short-lived local player access tokens. Recommended subject:
+Use short-lived local player access tokens: 24-hour expiry, HS256 signed with a 256-bit key from `Jwt__SigningKey`. Recommended subject:
 
 ```text
 sub = SteamID64

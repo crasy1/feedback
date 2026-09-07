@@ -25,6 +25,23 @@ POST /api/feedback
 Authorization: Bearer <jwt>
 ```
 
+Input (metadata fields are client-supplied and optional; the server only validates lengths):
+
+```json
+{
+  "type": "Bug",
+  "title": "...",
+  "content": "...",
+  "gameVersion": "1.2.3",
+  "buildNumber": "123",
+  "operatingSystem": "Windows 11",
+  "gpu": "RTX 4070",
+  "locale": "zh-CN",
+  "map": "arena_01",
+  "character": "mage"
+}
+```
+
 The SteamID comes from authentication, never the request body.
 
 ## List own feedback
@@ -33,6 +50,8 @@ The SteamID comes from authentication, never the request body.
 GET /api/feedback/mine
 Authorization: Bearer <jwt>
 ```
+
+Returns the most recent 100 items, newest first. No pagination parameters in v1.
 
 ## Read own feedback
 
@@ -76,3 +95,11 @@ POST /api/feedback/{id}/comments
 ```
 
 Prefer IP-based protection before authentication and SteamID-based limits after authentication.
+
+Initial limits (fixed window, configurable):
+
+```text
+POST /api/auth/steam               10 / minute  / IP
+POST /api/feedback                 5  / 10 min  / player
+POST /api/feedback/{id}/comments   20 / 10 min  / player
+```

@@ -47,7 +47,7 @@ Do not put substantial business logic directly in Minimal API handlers or Razor 
 
 ## Database
 
-Use EF Core + Npgsql. Migrations for all persisted schema changes. Store timestamps in UTC.
+Use EF Core + Npgsql. Migrations for all persisted schema changes. Migrations apply automatically on application startup (`Database__AutoMigrate`, default on). Store timestamps in UTC.
 
 Minimum useful indexes:
 
@@ -70,7 +70,7 @@ docker compose
 └── postgres
 ```
 
-- Keep PostgreSQL internal to the Docker network.
+- Keep PostgreSQL internal to the Docker network; the `postgres:17` image is exposed to localhost only for development.
 - The ASP.NET container listens on a predictable port such as `8080`.
 - The public edge may be Cloudflare Tunnel, Nginx, or Caddy.
 - Support forwarded headers correctly when behind a trusted reverse proxy.
