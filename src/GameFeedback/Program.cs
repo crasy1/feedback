@@ -40,6 +40,7 @@ builder.Services.AddHttpClient("Steam", client =>
 builder.Services.AddScoped<SteamAuthService>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<PlayerService>();
+builder.Services.AddScoped<FeedbackService>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -76,7 +77,20 @@ builder.Services.AddRateLimiter(options =>
         fixedWindow.Window = TimeSpan.FromMinutes(1);
         fixedWindow.QueueLimit = 0;
     });
+    options.AddPolicy("player-write", context => RateLimitPartition.GetFixedWindowLimiter(
+        GetPlayerPartitionKey(context),
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = rateLimit.FeedbackPer10Minutes,
+            Window = TimeSpan.FromMinutes(10),
+            QueueLimit = 0,
+        }));
 });
+
+static string GetPlayerPartitionKey(HttpContext context) =>
+    context.User.FindFirst("sub")?.Value
+    ?? context.Connection.RemoteIpAddress?.ToString()
+    ?? "unknown";
 
 var app = builder.Build();
 
@@ -104,9 +118,10 @@ app.UseWhen(
     branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
 app.UseHttpsRedirection();
 
-app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+// 限流在认证之后：按玩家（sub claim）分区需要已填充的 User。
+app.UseRateLimiter();
 
 // 防伪校验只作用于浏览器端 Blazor 页面；/api 走 JWT（无 Cookie），对 CSRF 免疫。
 app.UseWhen(
@@ -118,6 +133,7 @@ app.MapStaticAssets();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapAuthEndpoints();
+app.MapFeedbackEndpoints();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

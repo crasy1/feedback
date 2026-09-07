@@ -4,13 +4,13 @@
 
 **Blocked by:** 03.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Creating Feedback assigns ownership from the authenticated principal; a SteamID in the request body has no effect
-- [ ] Optional metadata fields accept client-supplied values bounded to spec lengths; oversized title/content → 400 with ProblemDetails
-- [ ] Invalid type → 400
-- [ ] Listing own Feedback returns only the caller's items, newest first, capped at the latest 100
-- [ ] Per-Player rate limit on creation → 429 when exceeded
-- [ ] Responses use DTOs, never serialized entities
+- [x] Creating Feedback assigns ownership from the authenticated principal; a SteamID in the request body has no effect
+- [x] Optional metadata fields accept client-supplied values bounded to spec lengths; oversized title/content → 400 with ProblemDetails
+- [x] Invalid type → 400
+- [x] Listing own Feedback returns only the caller's items, newest first, capped at the latest 100
+- [x] Per-Player rate limit on creation → 429 when exceeded
+- [x] Responses use DTOs, never serialized entities
 
 Parent spec: `.scratch/mvp-feedback-system/spec.md`

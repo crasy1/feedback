@@ -9,7 +9,7 @@ namespace GameFeedback.Tests.Infrastructure;
 /// 以测试专有配置托管完整应用：真实管道（路由、认证、限流），
 /// 数据库指向测试容器；Steam 传输层按需打桩。
 /// </summary>
-public sealed class GameFeedbackApplicationFactory(string connectionString, HttpMessageHandler? steamHandler = null)
+public sealed class GameFeedbackApplicationFactory(string connectionString, HttpMessageHandler? steamHandler = null, IReadOnlyDictionary<string, string>? extraSettings = null)
     : WebApplicationFactory<Program>
 {
     public const string TestIssuer = "GameFeedback.Test";
@@ -24,6 +24,14 @@ public sealed class GameFeedbackApplicationFactory(string connectionString, Http
         builder.UseSetting("Jwt:Issuer", TestIssuer);
         builder.UseSetting("Jwt:Audience", TestAudience);
         builder.UseSetting("Jwt:SigningKey", TestSigningKey);
+
+        if (extraSettings is not null)
+        {
+            foreach (var (key, value) in extraSettings)
+            {
+                builder.UseSetting(key, value);
+            }
+        }
 
         if (steamHandler is not null)
         {

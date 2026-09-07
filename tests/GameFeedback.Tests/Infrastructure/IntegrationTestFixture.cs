@@ -22,9 +22,11 @@ public sealed class IntegrationTestFixture : IAsyncLifetime
     }
 
     /// <summary>创建一个应用工厂；传入 Steam 传输桩则覆盖名为 "Steam" 的 HttpClient 主处理器。</summary>
-    public GameFeedbackApplicationFactory CreateFactory(HttpMessageHandler? steamHandler = null)
+    public GameFeedbackApplicationFactory CreateFactory(HttpMessageHandler? steamHandler = null, Action<Dictionary<string, string>>? extraSettings = null)
     {
-        var factory = new GameFeedbackApplicationFactory(ConnectionString, steamHandler);
+        var settings = new Dictionary<string, string>();
+        extraSettings?.Invoke(settings);
+        var factory = new GameFeedbackApplicationFactory(ConnectionString, steamHandler, settings.Count > 0 ? settings : null);
         _factories.Add(factory);
         return factory;
     }
