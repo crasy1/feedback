@@ -1,0 +1,10 @@
+@inject NavigationManager Navigation
+
+@* 未授权访问管理页面时重定向到登录页（电路内导航）。 *@
+
+@code {
+    protected override void OnInitialized()
+    {
+        Navigation.NavigateTo("/admin/login", forceLoad: true);
+    }
+}

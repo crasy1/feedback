@@ -1,0 +1,136 @@
+@page "/admin/feedback/{Id:int}"
+@layout GameFeedback.Components.Layout.AdminLayout
+@using System.Security.Claims
+@using GameFeedback.Domain
+@using GameFeedback.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize]
+@inject AdminFeedbackService AdminFeedbacks
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>反馈详情 - 游戏反馈系统</PageTitle>
+
+@if (_feedback is null)
+{
+    <p>加载中…</p>
+}
+else
+{
+    <h1>@_feedback.Title</h1>
+
+    <section class="meta">
+        <p><strong>类型：</strong>@_feedback.Type　<strong>状态：</strong>@StatusText(_feedback.Status)</p>
+        <p><strong>玩家：</strong>@(_feedback.Player?.SteamName ?? "未知")　<strong>SteamID64：</strong>@_feedback.Player?.SteamId</p>
+        <p><a href="https://steamcommunity.com/profiles/@_feedback.Player?.SteamId" target="_blank" rel="noopener">Steam 个人资料</a></p>
+        <p><strong>游戏版本：</strong>@_feedback.GameVersion　<strong>构建号：</strong>@_feedback.BuildNumber</p>
+        <p><strong>操作系统：</strong>@_feedback.OperatingSystem　<strong>GPU：</strong>@_feedback.Gpu</p>
+        <p><strong>语言：</strong>@_feedback.Locale　<strong>地图：</strong>@_feedback.Map　<strong>角色：</strong>@_feedback.Character</p>
+        <p><strong>创建时间 (UTC)：</strong>@_feedback.CreatedAt.ToString("yyyy-MM-dd HH:mm")</p>
+    </section>
+
+    <section class="content">
+        <h2>反馈内容</h2>
+        <pre>@_feedback.Content</pre>
+    </section>
+
+    <section class="comments">
+        <h2>评论 (@_feedback.Comments.Count)</h2>
+        @foreach (var comment in _feedback.Comments)
+        {
+            <div class="comment">
+                <span class="author">@(comment.AuthorType == CommentAuthorType.Admin ? "管理员" : "玩家")</span>
+                <span class="time">@comment.CreatedAt.ToString("yyyy-MM-dd HH:mm") UTC</span>
+                <p>@comment.Content</p>
+            </div>
+        }
+    </section>
+
+    <section class="actions">
+        <h2>回复</h2>
+        <textarea @bind="ReplyText" rows="4" placeholder="输入回复内容…"></textarea>
+        @if (!string.IsNullOrEmpty(_actionError))
+        {
+            <p class="error">@_actionError</p>
+        }
+        <button @onclick="SubmitReply">发送回复</button>
+
+        <h2>状态</h2>
+        <select @bind="SelectedStatus">
+            <option value="Open">待处理</option>
+            <option value="InProgress">处理中</option>
+            <option value="Resolved">已解决</option>
+            <option value="Closed">已关闭</option>
+        </select>
+        <button @onclick="ChangeStatus">更新状态</button>
+    </section>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private GameFeedback.Domain.Feedback? _feedback;
+    private string? ReplyText { get; set; }
+    private string SelectedStatus { get; set; } = "Open";
+    private string? _actionError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _feedback = await AdminFeedbacks.GetAsync(Id, CancellationToken.None);
+        if (_feedback is not null)
+        {
+            SelectedStatus = _feedback.Status.ToString();
+        }
+    }
+
+    private async Task SubmitReply()
+    {
+        _actionError = null;
+        var error = FeedbackService.ValidateComment(ReplyText);
+        if (error is not null)
+        {
+            _actionError = error;
+            return;
+        }
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var adminUserId = authState.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown-admin";
+
+        await AdminFeedbacks.ReplyAsync(adminUserId, Id, ReplyText!.Trim(), CancellationToken.None);
+        ReplyText = null;
+        _feedback = await AdminFeedbacks.GetAsync(Id, CancellationToken.None);
+    }
+
+    private async Task ChangeStatus()
+    {
+        _actionError = null;
+        var status = Enum.Parse<FeedbackStatus>(SelectedStatus);
+        await AdminFeedbacks.ChangeStatusAsync(Id, status, CancellationToken.None);
+        _feedback = await AdminFeedbacks.GetAsync(Id, CancellationToken.None);
+    }
+
+    private void BackToList() => Navigation.NavigateTo("/admin/feedback");
+
+    private static string StatusText(FeedbackStatus status) => status switch
+    {
+        FeedbackStatus.Open => "待处理",
+        FeedbackStatus.InProgress => "处理中",
+        FeedbackStatus.Resolved => "已解决",
+        FeedbackStatus.Closed => "已关闭",
+        _ => status.ToString(),
+    };
+}
+
+<style>
+    .meta p, .content p { margin: .35rem 0; font-size: .9rem; }
+    .content pre { white-space: pre-wrap; background: #fff; border: 1px solid #e5e7eb; padding: 1rem; border-radius: 4px; font-family: inherit; }
+    .comment { background: #fff; border: 1px solid #e5e7eb; border-radius: 4px; padding: .75rem 1rem; margin: .5rem 0; }
+    .comment .author { font-weight: 600; margin-right: .75rem; }
+    .comment .time { color: #6b7280; font-size: .8rem; }
+    .actions textarea { width: 100%; box-sizing: border-box; }
+    .actions button { margin-top: .5rem; margin-right: .75rem; padding: .4rem 1rem; border: 1px solid #d1d5db; background: #fff; border-radius: 4px; cursor: pointer; }
+    .actions select { margin-top: .5rem; }
+    .error { color: #dc2626; }
+</style>

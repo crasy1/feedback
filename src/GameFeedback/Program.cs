@@ -18,7 +18,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.AddDbContext<AppDbContext>(options =>
+builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddOptions<SteamOptions>()
@@ -49,7 +49,10 @@ builder.Services.AddScoped<SteamAuthService>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<FeedbackService>();
+builder.Services.AddScoped<AdminFeedbackService>();
 builder.Services.AddScoped<AdminSeeder>();
+
+builder.Services.AddCascadingAuthenticationState();
 
 // 管理员：ASP.NET Core Identity + Cookie（与玩家 JWT 是两套独立身份体系）。
 builder.Services.AddIdentityCore<IdentityUser>(options =>

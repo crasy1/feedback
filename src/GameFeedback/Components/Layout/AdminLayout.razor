@@ -1,0 +1,25 @@
+@inherits LayoutComponentBase
+
+@* 管理端布局：顶栏导航 + 内容区。文本为简体中文（自用运维工具，暂不做本地化）。 *@
+
+<div class="admin-root">
+    <header class="admin-header">
+        <span class="admin-title">游戏反馈系统 · 管理端</span>
+        <nav>
+            <a href="/admin/feedback">反馈列表</a>
+            <a href="/admin/logout">退出登录</a>
+        </nav>
+    </header>
+    <main class="admin-main">
+        @Body
+    </main>
+</div>
+
+<style>
+    .admin-root { min-height: 100vh; background: #f9fafb; }
+    .admin-header { display: flex; justify-content: space-between; align-items: center; padding: .75rem 1.5rem; background: #1e293b; color: #f1f5f9; }
+    .admin-header .admin-title { font-weight: 600; }
+    .admin-header nav a { color: #cbd5e1; margin-left: 1.25rem; text-decoration: none; font-size: .9rem; }
+    .admin-header nav a:hover { color: #fff; }
+    .admin-main { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+</style>

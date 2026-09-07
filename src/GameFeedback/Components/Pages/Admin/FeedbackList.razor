@@ -1,0 +1,178 @@
+@page "/admin/feedback"
+@layout GameFeedback.Components.Layout.AdminLayout
+@using GameFeedback.Domain
+@using GameFeedback.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject AdminFeedbackService AdminFeedbacks
+@inject NavigationManager Navigation
+
+<PageTitle>反馈列表 - 游戏反馈系统</PageTitle>
+
+<h1>反馈列表</h1>
+
+<div class="filters">
+    <label>
+        状态
+        <select @bind="StatusFilter">
+            <option value="">全部</option>
+            <option value="Open">待处理</option>
+            <option value="InProgress">处理中</option>
+            <option value="Resolved">已解决</option>
+            <option value="Closed">已关闭</option>
+        </select>
+    </label>
+    <label>
+        类型
+        <select @bind="TypeFilter">
+            <option value="">全部</option>
+            <option value="Bug">Bug</option>
+            <option value="Suggestion">Suggestion</option>
+            <option value="Other">Other</option>
+        </select>
+    </label>
+    <label>
+        游戏版本
+        <input @bind="GameVersionFilter" placeholder="如 1.2.3" />
+    </label>
+    <button @onclick="ApplyFilters">筛选</button>
+</div>
+
+@if (_items is null)
+{
+    <p>加载中…</p>
+}
+else if (_items.Count == 0)
+{
+    <p>暂无反馈。</p>
+}
+else
+{
+    <table class="feedback-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>类型</th>
+                <th>标题</th>
+                <th>玩家</th>
+                <th>状态</th>
+                <th>游戏版本</th>
+                <th>创建时间 (UTC)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var feedback in _items)
+            {
+                <tr>
+                    <td>@feedback.Id</td>
+                    <td>@feedback.Type</td>
+                    <td><a href="/admin/feedback/@feedback.Id">@feedback.Title</a></td>
+                    <td>@(feedback.Player?.SteamName ?? "未知")</td>
+                    <td>@StatusText(feedback.Status)</td>
+                    <td>@feedback.GameVersion</td>
+                    <td>@feedback.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+
+    <div class="pager">
+        <span>共 @_total 条 · 第 @Page / @TotalPages 页</span>
+        @if (Page > 1)
+        {
+            <button @onclick="() => GoToPage(Page - 1)">上一页</button>
+        }
+        @if (Page < TotalPages)
+        {
+            <button @onclick="() => GoToPage(Page + 1)">下一页</button>
+        }
+    </div>
+}
+
+@code {
+    private const int PageSize = AdminFeedbackService.DefaultPageSize;
+
+    [SupplyParameterFromQuery(Name = "page")]
+    public int Page { get; set; }
+
+    [SupplyParameterFromQuery(Name = "status")]
+    public string? Status { get; set; }
+
+    [SupplyParameterFromQuery(Name = "type")]
+    public string? Type { get; set; }
+
+    [SupplyParameterFromQuery(Name = "gameVersion")]
+    public string? GameVersion { get; set; }
+
+    private string StatusFilter
+    {
+        get => Status ?? string.Empty;
+        set => Status = string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    private string TypeFilter
+    {
+        get => Type ?? string.Empty;
+        set => Type = string.IsNullOrEmpty(value) ? null : value;
+    }
+
+    private string GameVersionFilter
+    {
+        get => GameVersion ?? string.Empty;
+        set => GameVersion = string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private IReadOnlyList<Domain.Feedback>? _items;
+    private int _total;
+
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling(_total / (double)PageSize));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Page = Math.Max(1, Page);
+        var status = Enum.TryParse<FeedbackStatus>(Status, ignoreCase: true, out var s) ? s : (FeedbackStatus?)null;
+        var type = Enum.TryParse<FeedbackType>(Type, ignoreCase: true, out var t) ? t : (FeedbackType?)null;
+
+        var (items, total) = await AdminFeedbacks.ListAsync(status, type, GameVersion, Page, PageSize, CancellationToken.None);
+        _items = items;
+        _total = total;
+    }
+
+    private void ApplyFilters()
+    {
+        var url = Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["page"] = 1,
+            ["status"] = Status,
+            ["type"] = Type,
+            ["gameVersion"] = GameVersion,
+        });
+        Navigation.NavigateTo(url);
+    }
+
+    private void GoToPage(int page)
+    {
+        var url = Navigation.GetUriWithQueryParameter("page", page);
+        Navigation.NavigateTo(url);
+    }
+
+    private static string StatusText(FeedbackStatus status) => status switch
+    {
+        FeedbackStatus.Open => "待处理",
+        FeedbackStatus.InProgress => "处理中",
+        FeedbackStatus.Resolved => "已解决",
+        FeedbackStatus.Closed => "已关闭",
+        _ => status.ToString(),
+    };
+}
+
+<style>
+    .filters { display: flex; gap: 1rem; align-items: end; margin: 1rem 0; }
+    .filters label { display: flex; flex-direction: column; font-size: .85rem; color: #374151; gap: .25rem; }
+    .feedback-table { width: 100%; border-collapse: collapse; background: #fff; }
+    .feedback-table th, .feedback-table td { border: 1px solid #e5e7eb; padding: .5rem .75rem; text-align: left; font-size: .875rem; }
+    .feedback-table thead { background: #f3f4f6; }
+    .pager { display: flex; gap: 1rem; align-items: center; margin-top: 1rem; }
+    button { padding: .35rem .8rem; border: 1px solid #d1d5db; background: #fff; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #f3f4f6; }
+</style>
