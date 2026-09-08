@@ -143,7 +143,8 @@ public class SteamAuthService(IHttpClientFactory httpClientFactory, IOptions<Ste
         return (null, null);
     }
 
-    private static bool IsValidSteamId64(string? value, out string steamId)
+    /// <summary>校验字符串是否为合法 SteamID64（17 位、不低于最小值）。</summary>
+    internal static bool IsValidSteamId64(string? value, out string steamId)
     {
         steamId = string.Empty;
         if (value is null || value.Length != 17 || !ulong.TryParse(value, CultureInfo.InvariantCulture, out var parsed))

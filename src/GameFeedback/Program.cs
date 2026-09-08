@@ -3,6 +3,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using GameFeedback.Api;
 using GameFeedback.Components;
+using GameFeedback.Contracts.Requests;
 using GameFeedback.Data;
 using GameFeedback.Services;
 using Microsoft.AspNetCore.Authentication;
@@ -11,8 +12,11 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
+using System.Text.Json.Nodes;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +30,11 @@ builder.Services.AddDbContextFactory<AppDbContext>(options =>
 builder.Services.AddOptions<SteamOptions>()
     .Bind(builder.Configuration.GetSection("Steam"))
     .ValidateDataAnnotations()
+    // 跳过 Steam 验票的调试开关只允许在 Development 生效：生产配置了它直接拒绝启动，
+    // 保证“Steam 验证不可用时不认证”这条安全不变量不被配置绕过。
+    .Validate(
+        options => !options.DebugSkipTicketValidation || builder.Environment.IsDevelopment(),
+        "Steam:DebugSkipTicketValidation 只能在 Development 环境启用")
     .ValidateOnStart();
 
 builder.Services.AddOptions<JwtOptions>()
@@ -149,6 +158,125 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     }
 });
 
+// OpenAPI 文档 + Swagger UI：开发环境默认启用；生产环境默认关闭，
+// 需显式配置 Swagger:Enabled=true（文档会暴露 API 结构，只应在受信网络开启）。
+var enableSwaggerDocs = builder.Environment.IsDevelopment()
+    || builder.Configuration.GetValue("Swagger:Enabled", defaultValue: false);
+// Swagger 请求体示例里的默认调试 SteamID64（仅演示格式，联调时可改）。
+const string PlayerClientDebugExampleSteamId = "76561198765432109";
+
+static JsonObject LoginRequestExample() => new()
+{
+    ["ticket"] = "0b4b1f2a3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f",
+    ["debugSteamId"] = PlayerClientDebugExampleSteamId,
+};
+
+static JsonObject FeedbackRequestExample() => new()
+{
+    ["type"] = "Bug",
+    ["title"] = "进入竞技场时客户端崩溃",
+    ["content"] = "1v1 模式加载 arena_01 必现崩溃，普通对局不受影响。",
+    ["gameVersion"] = "1.2.3",
+    ["buildNumber"] = "456",
+    ["operatingSystem"] = "Windows 11",
+    ["gpu"] = "RTX 4070",
+    ["locale"] = "zh-CN",
+    ["map"] = "arena_01",
+    ["character"] = "mage",
+};
+
+static JsonObject CommentRequestExample() => new()
+{
+    ["content"] = "补充：重启后问题依旧，驱动已是最新。",
+};
+
+static JsonObject? RequestBodyExampleFor(string relativePath) => relativePath switch
+{
+    "/api/auth/steam" => LoginRequestExample(),
+    "/api/feedback" => FeedbackRequestExample(),
+    "/api/feedback/{id}/comments" => CommentRequestExample(),
+    _ => null,
+};
+
+// ApiDescription.RelativePath 与文档路径键有差异：可能带尾部斜杠、
+// 含 ":int" 这类路由约束。统一成文档路径键的形状再匹配。
+static string NormalizeOperationPath(string relativePath) =>
+    "/" + relativePath.TrimStart('/').TrimEnd('/').Replace(":int", string.Empty);
+if (enableSwaggerDocs)
+{
+    builder.Services.AddOpenApi(options =>
+    {
+        // 注册 Bearer 安全方案，只附加到需要玩家身份的反馈端点；
+        // Steam 登录端点是换取令牌的入口，本身不要求授权。
+        options.AddDocumentTransformer((document, context, cancellationToken) =>
+        {
+            document.Components ??= new OpenApiComponents();
+            document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+            document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
+            {
+                Type = SecuritySchemeType.Http,
+                Scheme = "bearer",
+                BearerFormat = "JWT",
+                Description = "先调用 POST /api/auth/steam 获取 accessToken，再粘贴到此处（不含 Bearer 前缀）",
+            };
+            foreach (var (pathKey, pathItem) in document.Paths)
+            {
+                if (!pathKey.StartsWith("/api/feedback"))
+                {
+                    continue;
+                }
+                if (pathItem.Operations is null)
+                {
+                    continue;
+                }
+                foreach (var operation in pathItem.Operations.Values)
+                {
+                    // v2 的引用序列化需要宿主文档，缺省时会把安全要求写成空对象 {}，
+                    // Swagger UI 会把 {} 理解为"允许匿名"而不附带 Authorization 头。
+                    operation.Security =
+                    [
+                        new OpenApiSecurityRequirement
+                        {
+                            [new OpenApiSecuritySchemeReference("Bearer", document)] = [],
+                        },
+                    ];
+                }
+            }
+            return Task.CompletedTask;
+        });
+
+        // 为请求 DTO 填充示例值：模型（Schema）文档里展示。
+        options.AddSchemaTransformer((schema, context, cancellationToken) =>
+        {
+            if (context.JsonTypeInfo.Type == typeof(SteamLoginRequest))
+            {
+                schema.Example = LoginRequestExample();
+            }
+            else if (context.JsonTypeInfo.Type == typeof(CreateFeedbackRequest))
+            {
+                schema.Example = FeedbackRequestExample();
+            }
+            else if (context.JsonTypeInfo.Type == typeof(CreateCommentRequest))
+            {
+                schema.Example = CommentRequestExample();
+            }
+            return Task.CompletedTask;
+        });
+
+        // Swagger UI"Try it out"的请求体预填取自媒体类型级 example（schema 级的
+        // example 只在模型文档展示，且我们的请求体 schema 是 oneOf 包裹），
+        // 因此必须在 operation 上再写一份。
+        options.AddOperationTransformer((operation, context, cancellationToken) =>
+        {
+            if (operation.RequestBody?.Content.TryGetValue("application/json", out var media) == true)
+            {
+                media.Example = RequestBodyExampleFor(NormalizeOperationPath(context.Description.RelativePath));
+            }
+            return Task.CompletedTask;
+        });
+    });
+}
+
 var app = builder.Build();
 
 // 必须最先执行，限流按 IP 分区才能取到真实客户端地址。
@@ -217,6 +345,15 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapAuthEndpoints();
 app.MapFeedbackEndpoints();
+
+if (enableSwaggerDocs)
+{
+    app.MapOpenApi();
+    // 不用 MapSwaggerUI：其端点路由实现存在 catch-all 路由缺陷（UI 页面 404），
+    // 中间件形式由内嵌资源直接服务页面与资产，行为稳定。
+    app.UseSwaggerUI(options => options.SwaggerEndpoint("/openapi/v1.json", "Player API v1"));
+}
+
 app.MapRazorPages();
 
 app.MapRazorComponents<App>()

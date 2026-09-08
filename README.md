@@ -25,6 +25,7 @@ dotnet run --project src/GameFeedback
 ```
 
 - 健康检查：`curl http://localhost:5087/health`（端口见 launchSettings）
+- Swagger UI：`http://localhost:5087/swagger`（开发环境默认开启，可直接调试玩家 API）
 - 管理后台：`/admin`（首次启动自动创建初始管理员，账号来自 `Admin` 配置段）
 
 ## 集成测试
@@ -46,6 +47,7 @@ curl http://127.0.0.1:3000/health
 - 数据库在 Docker 网络内部，应用容器的 `8080` 映射至本机回环的 `3000`；公网入口由 Cloudflare Tunnel / Nginx / Caddy 承担。
 - 转发头仅接受回环或显式配置的代理。使用 Docker 时，将 `.env` 的 `REVERSE_PROXY_IP` 设置为应用实际看到的代理来源 IP（可能是网桥网关）；留空不会信任外部来源。可通过 `docker network inspect <网络名>` 核对网关与代理地址。代理须正确设置客户端 IP 和协议，否则 HTTPS 识别及按 IP 登录限流无法反映真实客户端。
 - 迁移在应用启动时自动执行（`Database__AutoMigrate` 可关闭）。
+- Swagger UI 在生产环境默认关闭；将 `.env` 的 `SWAGGER_ENABLED` 设为 `true` 可开启（文档会暴露 API 结构，仅限内网/受信网络调试，不要经公网入口暴露）。
 
 ## 配置项
 
@@ -53,10 +55,12 @@ curl http://127.0.0.1:3000/health
 |---|---|
 | `ConnectionStrings__DefaultConnection` | PostgreSQL 连接字符串 |
 | `Steam__ApiKey` / `Steam__AppId` | Steam Publisher Web API Key / 游戏 AppID |
+| `Steam__DebugSkipTicketValidation` | 调试开关：跳过 Steam 验票（登录请求带 `debugSteamId`）。仅 Development 可启用，生产配置会拒绝启动 |
 | `Steam__Identity` | 票据 identity，固定 `feedback-api` |
 | `Jwt__Issuer` / `Jwt__Audience` / `Jwt__SigningKey` | 访问令牌签发配置（HS256，24 小时有效） |
 | `Admin__SeedEmail` / `Admin__SeedPassword` | 首个管理员（仅在数据库无管理员时创建） |
 | `Database__AutoMigrate` | 启动时自动迁移，默认 true |
+| `Swagger__Enabled` | Swagger UI / OpenAPI 文档；开发环境默认开启，其他环境默认关闭 |
 | `RateLimit__AuthPerMinute` 等 | 限流配置，见 `docs/specs/player-api.md` |
 | `ReverseProxy__KnownProxies__0` 等 | 额外可信代理来源 IP；Compose 使用 `REVERSE_PROXY_IP`，默认仅回环 |
 

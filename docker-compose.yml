@@ -32,6 +32,7 @@ services:
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=gamefeedback;Username=gamefeedback;Password=${POSTGRES_PASSWORD}
       Steam__ApiKey: ${STEAM_API_KEY:-unset}
       Steam__AppId: ${STEAM_APP_ID:-unset}
+      Steam__DebugSkipTicketValidation: ${STEAM_DEBUG_SKIP:-false}
       Jwt__Issuer: ${JWT_ISSUER:-GameFeedback}
       Jwt__Audience: ${JWT_AUDIENCE:-GameFeedbackClient}
       Jwt__SigningKey: ${JWT_SIGNING_KEY:?请在 .env 中设置至少 32 字符的 JWT_SIGNING_KEY}
@@ -39,6 +40,7 @@ services:
       Admin__SeedPassword: ${ADMIN_SEED_PASSWORD:?请在 .env 中设置 ADMIN_SEED_PASSWORD}
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ReverseProxy__KnownProxies__0: ${REVERSE_PROXY_IP:-127.0.0.1}
+      Swagger__Enabled: ${SWAGGER_ENABLED:-false}
     ports:
       # 仅绑定本机回环：公网入口由 Cloudflare Tunnel / Nginx / Caddy 承担
       - "127.0.0.1:3000:8080"

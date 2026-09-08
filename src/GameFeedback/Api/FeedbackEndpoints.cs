@@ -12,6 +12,7 @@ public static class FeedbackEndpoints
     {
         // 玩家 API 走 JWT（无 Cookie），对 CSRF 免疫；防伪校验保留给 Blazor 管理端表单。
         var group = app.MapGroup("/api/feedback")
+            .WithTags("Feedback")
             .RequireAuthorization("Player")
             .DisableAntiforgery();
 
@@ -46,7 +47,12 @@ public static class FeedbackEndpoints
             // SteamID 来自认证主体，与请求体无关。
             var feedback = await feedbacks.CreateAsync(playerId.Value, request, cancellationToken);
             return Results.Created($"/api/feedback/{feedback.Id}", FeedbackService.ToDto(feedback));
-        }).RequireRateLimiting("player-write");
+        })
+        .WithSummary("创建反馈")
+        .Produces<FeedbackDto>(StatusCodes.Status201Created)
+        .ProducesProblem(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .RequireRateLimiting("player-write");
 
         group.MapGet("/mine", async (
             ClaimsPrincipal user,
@@ -67,7 +73,10 @@ public static class FeedbackEndpoints
 
             var items = await feedbacks.ListOwnAsync(playerId.Value, cancellationToken);
             return Results.Ok(items.Select(FeedbackService.ToDto));
-        });
+        })
+        .WithSummary("自己的最近 100 条反馈")
+        .Produces<IEnumerable<FeedbackDto>>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status401Unauthorized);
 
         group.MapGet("/{id:int}", async (
             int id,
@@ -98,7 +107,11 @@ public static class FeedbackEndpoints
                 .Select(c => new CommentDto(c.Id, c.AuthorType.ToString(), c.Content, c.CreatedAt))
                 .ToList();
             return Results.Ok(FeedbackService.ToDetailDto(feedback, comments));
-        });
+        })
+        .WithSummary("反馈详情（仅限属主；非本人或缺失一律 404）")
+        .Produces<FeedbackDetailDto>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status401Unauthorized);
 
         group.MapPost("/{id:int}/comments", async (
             int id,
@@ -135,7 +148,12 @@ public static class FeedbackEndpoints
 
             var comment = await feedbacks.AddPlayerCommentAsync(playerId.Value, id, content!, cancellationToken);
             return Results.Created($"/api/feedback/{id}", new CommentDto(comment.Id, comment.AuthorType.ToString(), comment.Content, comment.CreatedAt));
-        }).RequireRateLimiting("player-comments");
+        })
+        .WithSummary("追加玩家评论（仅限属主）")
+        .Produces<CommentDto>(StatusCodes.Status201Created)
+        .ProducesProblem(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status404NotFound)
+        .RequireRateLimiting("player-comments");
 
         return app;
     }
