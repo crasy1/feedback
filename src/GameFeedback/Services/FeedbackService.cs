@@ -14,7 +14,10 @@ public class FeedbackService(AppDbContext db)
     /// <summary>按玩家可见限额校验请求；返回错误消息，null 表示通过。</summary>
     public static string? Validate(CreateFeedbackRequest request)
     {
-        if (!Enum.TryParse<FeedbackType>(request.Type, ignoreCase: true, out _) || request.Type is null)
+        // 只接受类型名称，拒绝 Enum.TryParse 支持的数字和逗号组合。
+        if (!Enum.TryParse<FeedbackType>(request.Type, ignoreCase: true, out var type)
+            || !Enum.IsDefined(type)
+            || !string.Equals(request.Type, type.ToString(), StringComparison.OrdinalIgnoreCase))
         {
             return "type 必须为 Bug、Suggestion 或 Other";
         }

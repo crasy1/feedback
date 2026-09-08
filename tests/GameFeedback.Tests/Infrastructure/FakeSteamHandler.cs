@@ -91,6 +91,8 @@ public sealed class FakeSteamHandler : HttpMessageHandler
 
     public static Func<HttpResponseMessage> MalformedJson() => () => JsonResponse("{not-json");
 
+    public static Func<HttpResponseMessage> Payload(string json) => () => JsonResponse(json);
+
     public static Func<HttpResponseMessage> Profile(string steamName, string avatarUrl) => () => JsonResponse(
         JsonSerializer.Serialize(new
         {

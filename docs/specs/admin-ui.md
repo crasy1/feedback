@@ -23,6 +23,7 @@ Show at least:
 - type
 - title
 - Steam display name
+- Steam avatar when available
 - status
 - game version
 - created time
@@ -33,7 +34,7 @@ Support basic filtering by:
 - type
 - game version
 
-Paginated via `page` / `pageSize` query parameters, default 50 per page, newest first.
+Paginated via `page` / `pageSize` query parameters, default 50 per page, newest first. Missing or nonpositive `pageSize` uses 50; the maximum is 200. Filtering and page navigation preserve the normalized page size.
 
 ## Feedback detail
 
@@ -41,6 +42,7 @@ Show:
 
 - title/content
 - Steam name
+- Steam avatar when available
 - SteamID64
 - Steam profile link
 - game version/build

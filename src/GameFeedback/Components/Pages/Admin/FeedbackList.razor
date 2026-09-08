@@ -16,10 +16,10 @@
         状态
         <select @bind="StatusFilter">
             <option value="">全部</option>
-            <option value="Open">待处理</option>
-            <option value="InProgress">处理中</option>
-            <option value="Resolved">已解决</option>
-            <option value="Closed">已关闭</option>
+            @foreach (var status in Enum.GetValues<FeedbackStatus>())
+            {
+                <option value="@status">@FeedbackStatusDisplay.GetText(status)</option>
+            }
         </select>
     </label>
     <label>
@@ -67,8 +67,14 @@ else
                     <td>@feedback.Id</td>
                     <td>@feedback.Type</td>
                     <td><a href="/admin/feedback/@feedback.Id">@feedback.Title</a></td>
-                    <td>@(feedback.Player?.SteamName ?? "未知")</td>
-                    <td>@StatusText(feedback.Status)</td>
+                    <td>
+                        @if (!string.IsNullOrWhiteSpace(feedback.Player?.AvatarUrl))
+                        {
+                            <img class="player-avatar" src="@feedback.Player.AvatarUrl" alt="玩家头像" width="32" height="32" loading="lazy" />
+                        }
+                        @(feedback.Player?.SteamName ?? "未知")
+                    </td>
+                    <td>@FeedbackStatusDisplay.GetText(feedback.Status)</td>
                     <td>@feedback.GameVersion</td>
                     <td>@feedback.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
                 </tr>
@@ -90,10 +96,11 @@ else
 }
 
 @code {
-    private const int PageSize = AdminFeedbackService.DefaultPageSize;
-
     [SupplyParameterFromQuery(Name = "page")]
     public int Page { get; set; }
+
+    [SupplyParameterFromQuery(Name = "pageSize")]
+    public int PageSize { get; set; }
 
     [SupplyParameterFromQuery(Name = "status")]
     public string? Status { get; set; }
@@ -130,6 +137,7 @@ else
     protected override async Task OnParametersSetAsync()
     {
         Page = Math.Max(1, Page);
+        PageSize = Math.Clamp(PageSize <= 0 ? AdminFeedbackService.DefaultPageSize : PageSize, 1, AdminFeedbackService.MaxPageSize);
         var status = Enum.TryParse<FeedbackStatus>(Status, ignoreCase: true, out var s) ? s : (FeedbackStatus?)null;
         var type = Enum.TryParse<FeedbackType>(Type, ignoreCase: true, out var t) ? t : (FeedbackType?)null;
 
@@ -143,6 +151,7 @@ else
         var url = Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
         {
             ["page"] = 1,
+            ["pageSize"] = PageSize,
             ["status"] = Status,
             ["type"] = Type,
             ["gameVersion"] = GameVersion,
@@ -152,18 +161,13 @@ else
 
     private void GoToPage(int page)
     {
-        var url = Navigation.GetUriWithQueryParameter("page", page);
+        var url = Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+        {
+            ["page"] = page,
+            ["pageSize"] = PageSize,
+        });
         Navigation.NavigateTo(url);
     }
-
-    private static string StatusText(FeedbackStatus status) => status switch
-    {
-        FeedbackStatus.Open => "待处理",
-        FeedbackStatus.InProgress => "处理中",
-        FeedbackStatus.Resolved => "已解决",
-        FeedbackStatus.Closed => "已关闭",
-        _ => status.ToString(),
-    };
 }
 
 <style>
@@ -172,6 +176,7 @@ else
     .feedback-table { width: 100%; border-collapse: collapse; background: #fff; }
     .feedback-table th, .feedback-table td { border: 1px solid #e5e7eb; padding: .5rem .75rem; text-align: left; font-size: .875rem; }
     .feedback-table thead { background: #f3f4f6; }
+    .player-avatar { object-fit: cover; border-radius: 4px; vertical-align: middle; margin-right: .5rem; }
     .pager { display: flex; gap: 1rem; align-items: center; margin-top: 1rem; }
     button { padding: .35rem .8rem; border: 1px solid #d1d5db; background: #fff; border-radius: 4px; cursor: pointer; }
     button:hover { background: #f3f4f6; }

@@ -32,6 +32,12 @@ Do not call Steam again for every feedback request.
 
 On each login the server also fetches `ISteamUser/GetPlayerSummaries` to refresh `SteamName` / `AvatarUrl`. This is best effort: a failure to fetch the profile does not fail the login; the stored values are kept (or left empty on first login).
 
+Check the JSON type at every boundary before reading objects or strings. Syntactically valid but incorrectly shaped ticket responses are rejected with 401; incorrectly shaped profile responses use the same best-effort fallback as other profile failures.
+
+### Client IP and proxy trust
+
+The login rate limit is partitioned by the effective remote IP, with IPv4 and IPv4-mapped IPv6 addresses sharing a partition. Forwarded IP and scheme headers are honored only from loopback or explicitly configured `ReverseProxy:KnownProxies` addresses. Each trusted proxy must replace or correctly append the incoming forwarding headers; do not expose an unrestricted path around the trusted edge.
+
 ### Administrators
 
 Administrators use normal web authentication:

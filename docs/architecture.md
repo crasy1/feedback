@@ -74,4 +74,5 @@ docker compose
 - The ASP.NET container listens on a predictable port such as `8080`.
 - The public edge may be Cloudflare Tunnel, Nginx, or Caddy.
 - Support forwarded headers correctly when behind a trusted reverse proxy.
+- Trust loopback proxies by default. Configure additional proxy source IPs through `ReverseProxy__KnownProxies__0` (then `__1`, etc.); Docker Compose maps `REVERSE_PROXY_IP` to the first entry. Use the source IP seen by the application, which may be a Docker bridge gateway. Forwarded headers from other sources are ignored; do not clear the framework trust lists.
 - Do not add Redis, object storage, workers, or other containers until a feature actually requires them.

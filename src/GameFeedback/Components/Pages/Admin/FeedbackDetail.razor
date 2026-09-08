@@ -21,8 +21,15 @@ else
     <h1>@_feedback.Title</h1>
 
     <section class="meta">
-        <p><strong>类型：</strong>@_feedback.Type　<strong>状态：</strong>@StatusText(_feedback.Status)</p>
-        <p><strong>玩家：</strong>@(_feedback.Player?.SteamName ?? "未知")　<strong>SteamID64：</strong>@_feedback.Player?.SteamId</p>
+        <p><strong>类型：</strong>@_feedback.Type　<strong>状态：</strong>@FeedbackStatusDisplay.GetText(_feedback.Status)</p>
+        <p>
+            <strong>玩家：</strong>
+            @if (!string.IsNullOrWhiteSpace(_feedback.Player?.AvatarUrl))
+            {
+                <img class="player-avatar" src="@_feedback.Player.AvatarUrl" alt="玩家头像" width="48" height="48" />
+            }
+            @(_feedback.Player?.SteamName ?? "未知")　<strong>SteamID64：</strong>@_feedback.Player?.SteamId
+        </p>
         <p><a href="https://steamcommunity.com/profiles/@_feedback.Player?.SteamId" target="_blank" rel="noopener">Steam 个人资料</a></p>
         <p><strong>游戏版本：</strong>@_feedback.GameVersion　<strong>构建号：</strong>@_feedback.BuildNumber</p>
         <p><strong>操作系统：</strong>@_feedback.OperatingSystem　<strong>GPU：</strong>@_feedback.Gpu</p>
@@ -58,10 +65,10 @@ else
 
         <h2>状态</h2>
         <select @bind="SelectedStatus">
-            <option value="Open">待处理</option>
-            <option value="InProgress">处理中</option>
-            <option value="Resolved">已解决</option>
-            <option value="Closed">已关闭</option>
+            @foreach (var status in Enum.GetValues<FeedbackStatus>())
+            {
+                <option value="@status">@FeedbackStatusDisplay.GetText(status)</option>
+            }
         </select>
         <button @onclick="ChangeStatus">更新状态</button>
     </section>
@@ -112,19 +119,11 @@ else
     }
 
     private void BackToList() => Navigation.NavigateTo("/admin/feedback");
-
-    private static string StatusText(FeedbackStatus status) => status switch
-    {
-        FeedbackStatus.Open => "待处理",
-        FeedbackStatus.InProgress => "处理中",
-        FeedbackStatus.Resolved => "已解决",
-        FeedbackStatus.Closed => "已关闭",
-        _ => status.ToString(),
-    };
 }
 
 <style>
     .meta p, .content p { margin: .35rem 0; font-size: .9rem; }
+    .player-avatar { object-fit: cover; border-radius: 4px; vertical-align: middle; margin-right: .5rem; }
     .content pre { white-space: pre-wrap; background: #fff; border: 1px solid #e5e7eb; padding: 1rem; border-radius: 4px; font-family: inherit; }
     .comment { background: #fff; border: 1px solid #e5e7eb; border-radius: 4px; padding: .75rem 1rem; margin: .5rem 0; }
     .comment .author { font-weight: 600; margin-right: .75rem; }

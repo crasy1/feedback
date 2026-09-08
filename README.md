@@ -40,10 +40,11 @@ dotnet test
 ```bash
 cp .env.example .env   # 填写 POSTGRES_PASSWORD、JWT_SIGNING_KEY（≥32 字符）、ADMIN_SEED_PASSWORD、Steam 密钥
 docker compose up -d --build
-curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:3000/health
 ```
 
-- 数据库在 Docker 网络内部，应用容器仅向本机回环暴露 `8080`；公网入口由 Cloudflare Tunnel / Nginx / Caddy 承担，应用已支持 `X-Forwarded-For` / `X-Forwarded-Proto`。
+- 数据库在 Docker 网络内部，应用容器的 `8080` 映射至本机回环的 `3000`；公网入口由 Cloudflare Tunnel / Nginx / Caddy 承担。
+- 转发头仅接受回环或显式配置的代理。使用 Docker 时，将 `.env` 的 `REVERSE_PROXY_IP` 设置为应用实际看到的代理来源 IP（可能是网桥网关）；留空不会信任外部来源。可通过 `docker network inspect <网络名>` 核对网关与代理地址。代理须正确设置客户端 IP 和协议，否则 HTTPS 识别及按 IP 登录限流无法反映真实客户端。
 - 迁移在应用启动时自动执行（`Database__AutoMigrate` 可关闭）。
 
 ## 配置项
@@ -57,6 +58,7 @@ curl http://127.0.0.1:8080/health
 | `Admin__SeedEmail` / `Admin__SeedPassword` | 首个管理员（仅在数据库无管理员时创建） |
 | `Database__AutoMigrate` | 启动时自动迁移，默认 true |
 | `RateLimit__AuthPerMinute` 等 | 限流配置，见 `docs/specs/player-api.md` |
+| `ReverseProxy__KnownProxies__0` 等 | 额外可信代理来源 IP；Compose 使用 `REVERSE_PROXY_IP`，默认仅回环 |
 
 **严禁**把真实密钥提交进仓库；生产配置一律通过环境变量 / `.env` 提供。
 

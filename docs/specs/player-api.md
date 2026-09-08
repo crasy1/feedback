@@ -75,6 +75,8 @@ Do not expose admin operations through player endpoints.
 
 ## Validation limits
 
+`type` accepts only the names `Bug`, `Suggestion`, and `Other` (case-insensitive). Numeric enum strings and comma-separated combinations are rejected with 400.
+
 ```text
 Title:        1–200 chars
 Content:      1–10,000 chars

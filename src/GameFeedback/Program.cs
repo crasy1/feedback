@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
 using GameFeedback.Api;
@@ -106,12 +107,15 @@ var rateLimit = builder.Configuration.GetSection("RateLimit").Get<RateLimitOptio
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddFixedWindowLimiter("auth-ip", fixedWindow =>
-    {
-        fixedWindow.PermitLimit = rateLimit.AuthPerMinute;
-        fixedWindow.Window = TimeSpan.FromMinutes(1);
-        fixedWindow.QueueLimit = 0;
-    });
+    options.AddPolicy("auth-ip", context => RateLimitPartition.GetFixedWindowLimiter(
+        // IPv4 与 IPv4-mapped IPv6 表示同一个客户端，必须共享额度。
+        context.Connection.RemoteIpAddress?.MapToIPv6().ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = rateLimit.AuthPerMinute,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        }));
     options.AddPolicy("player-write", context => RateLimitPartition.GetFixedWindowLimiter(
         GetPlayerPartitionKey(context),
         _ => new FixedWindowRateLimiterOptions
@@ -135,12 +139,14 @@ static string GetPlayerPartitionKey(HttpContext context) =>
     ?? context.Connection.RemoteIpAddress?.ToString()
     ?? "unknown";
 
-// 反向代理（Cloudflare Tunnel / Nginx / Caddy）之后需转发头还原客户端 IP 与协议。
+// 保留框架的回环信任默认值，其他反向代理必须显式配置。
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
+    foreach (var proxy in builder.Configuration.GetSection("ReverseProxy:KnownProxies").Get<string[]>() ?? [])
+    {
+        options.KnownProxies.Add(IPAddress.Parse(proxy));
+    }
 });
 
 var app = builder.Build();

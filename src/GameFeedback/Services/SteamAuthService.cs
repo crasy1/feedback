@@ -57,9 +57,13 @@ public class SteamAuthService(IHttpClientFactory httpClientFactory, IOptions<Ste
 
         using (document)
         {
-            if (!document.RootElement.TryGetProperty("response", out var responseObject) ||
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                !document.RootElement.TryGetProperty("response", out var responseObject) ||
+                responseObject.ValueKind != JsonValueKind.Object ||
                 !responseObject.TryGetProperty("params", out var parameters) ||
+                parameters.ValueKind != JsonValueKind.Object ||
                 !parameters.TryGetProperty("result", out var result) ||
+                result.ValueKind != JsonValueKind.String ||
                 !string.Equals(result.GetString(), "OK", StringComparison.OrdinalIgnoreCase))
             {
                 logger.LogInformation("Steam 票据验证未通过");
@@ -67,6 +71,7 @@ public class SteamAuthService(IHttpClientFactory httpClientFactory, IOptions<Ste
             }
 
             if (!parameters.TryGetProperty("steamid", out var steamIdElement) ||
+                steamIdElement.ValueKind != JsonValueKind.String ||
                 !IsValidSteamId64(steamIdElement.GetString(), out var steamId))
             {
                 logger.LogInformation("Steam 票据验证响应缺少有效 SteamID64");
@@ -104,17 +109,31 @@ public class SteamAuthService(IHttpClientFactory httpClientFactory, IOptions<Ste
         {
             using var document = await JsonDocument.ParseAsync(
                 await response.Content.ReadAsStreamAsync(cancellationToken), cancellationToken: cancellationToken);
-            if (document.RootElement.TryGetProperty("response", out var responseObject) &&
-                responseObject.TryGetProperty("players", out var players) &&
-                players.ValueKind == JsonValueKind.Array &&
-                players.GetArrayLength() > 0 &&
-                players[0].TryGetProperty("personaname", out var name))
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                !document.RootElement.TryGetProperty("response", out var responseObject) ||
+                responseObject.ValueKind != JsonValueKind.Object ||
+                !responseObject.TryGetProperty("players", out var players) ||
+                players.ValueKind != JsonValueKind.Array ||
+                players.GetArrayLength() == 0 ||
+                players[0].ValueKind != JsonValueKind.Object ||
+                !players[0].TryGetProperty("personaname", out var name) ||
+                name.ValueKind != JsonValueKind.String)
             {
-                var avatar = players[0].TryGetProperty("avatarfull", out var avatarElement)
-                    ? avatarElement.GetString()
-                    : null;
-                return (name.GetString(), avatar);
+                return (null, null);
             }
+
+            string? avatar = null;
+            if (players[0].TryGetProperty("avatarfull", out var avatarElement))
+            {
+                if (avatarElement.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+                {
+                    return (null, null);
+                }
+
+                avatar = avatarElement.GetString();
+            }
+
+            return (name.GetString(), avatar);
         }
         catch (JsonException)
         {

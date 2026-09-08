@@ -1,4 +1,11 @@
 services:
+  # 如果服务器有 Cloudflare Tunnel就可以解开注释配置
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   network_mode: host
+  #   restart: unless-stopped
+  #   command: tunnel --no-autoupdate run --token ${CLOUD_FLARE_TUNNEL_TOKEN}
+
   postgres:
     image: postgres:17
     environment:
@@ -31,9 +38,10 @@ services:
       Admin__SeedEmail: ${ADMIN_SEED_EMAIL:-admin@example.com}
       Admin__SeedPassword: ${ADMIN_SEED_PASSWORD:?请在 .env 中设置 ADMIN_SEED_PASSWORD}
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ReverseProxy__KnownProxies__0: ${REVERSE_PROXY_IP:-127.0.0.1}
     ports:
       # 仅绑定本机回环：公网入口由 Cloudflare Tunnel / Nginx / Caddy 承担
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:3000:8080"
     restart: unless-stopped
 
 volumes:

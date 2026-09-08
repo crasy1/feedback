@@ -37,3 +37,7 @@ Cover:
 - oversized title/content rejected
 - invalid enum/status rejected
 - rate-limited endpoints behave correctly
+- login limits isolate distinct client IPs and normalize IPv4-mapped addresses
+- forwarded client IP/protocol are accepted only from trusted proxies; forged headers cannot bypass login limits
+- numeric and composite feedback type strings are rejected without saving feedback
+- valid JSON with incorrect Steam ticket/profile shapes follows rejection or profile fallback semantics

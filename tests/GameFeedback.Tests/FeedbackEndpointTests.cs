@@ -83,6 +83,44 @@ public sealed class FeedbackEndpointTests(IntegrationTestFixture fixture)
         Assert.Equal(HttpStatusCode.BadRequest, missingTitle.StatusCode);
     }
 
+    [Theory]
+    [InlineData("999")]
+    [InlineData("-1")]
+    [InlineData("0")]
+    [InlineData("1")]
+    [InlineData("Bug, Suggestion")]
+    [InlineData("Bug, Bug")]
+    public async Task Create_rejects_invalid_type_without_storing_feedback(string type)
+    {
+        var (_, client, _) = await PlayerClient.CreateAsync(fixture, PlayerClient.UniqueSteamId());
+
+        var response = await client.PostAsJsonAsync("/api/feedback", new { type, title = "t", content = "c" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(400, problem.GetProperty("status").GetInt32());
+        Assert.Contains("type", problem.GetProperty("detail").GetString());
+
+        var mine = await client.GetFromJsonAsync<JsonElement>("/api/feedback/mine");
+        Assert.Equal(0, mine.GetArrayLength());
+    }
+
+    [Theory]
+    [InlineData("bug", "Bug")]
+    [InlineData("sUGGESTION", "Suggestion")]
+    [InlineData("oTHER", "Other")]
+    public async Task Create_accepts_type_names_case_insensitively(string type, string expectedType)
+    {
+        var (_, client, _) = await PlayerClient.CreateAsync(fixture, PlayerClient.UniqueSteamId());
+
+        var response = await client.PostAsJsonAsync("/api/feedback", new { type, title = "t", content = "c" });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(expectedType, body.GetProperty("type").GetString());
+    }
+
     [Fact]
     public async Task Mine_returns_only_own_items_newest_first()
     {
