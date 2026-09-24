@@ -69,9 +69,14 @@ import urllib.error
 import urllib.request
 
 DEFAULT_BASE_URL = "http://localhost:5087"
+DEFAULT_GAME_APP_ID = "unset"
 
 # Set from --base-url in run(); read by call_api().
 BASE_URL = DEFAULT_BASE_URL
+
+# Set from --app-id in run(). The player API only exists under /g/{appId}/api/...,
+# so every /api path is rewritten through this prefix in call_api().
+GAME_APP_ID = DEFAULT_GAME_APP_ID
 
 # The admin gate answers with a redirect chain that ends on the login page; the check
 # asserts this suffix on the *final* URL (after redirects), not on a raw 302.
@@ -82,7 +87,9 @@ ADMIN_LOGIN_RE = re.compile(r"/admin/login$")
 REQUEST_TIMEOUT_SECONDS = 30.0
 
 # Claims the player token is allowed to carry; anything else is an unexpected leak.
-ALLOWED_JWT_CLAIMS = ("sub", "jti", "iss", "aud", "exp", "nbf", "iat")
+# "game" is the game binding added by the multi-game upgrade: the token is only valid
+# under /g/{appId} for the game whose numeric id it names.
+ALLOWED_JWT_CLAIMS = ("sub", "game", "jti", "iss", "aud", "exp", "nbf", "iat")
 
 
 # --------------------------------------------------------------------------- output
@@ -226,8 +233,15 @@ def _decode_body(response):
         return raw.decode("utf-8", errors="replace")
 
 
-def call_api(method, path, headers=None, body=None):
-    """Perform one API call; HTTP error statuses come back as data, transport errors as status 0."""
+def call_api(method, path, headers=None, body=None, prefix_game=True):
+    """Perform one API call; HTTP error statuses come back as data, transport errors as status 0.
+
+    Player API paths are rewritten to /g/{GAME_APP_ID}/api/... so the individual checks below can
+    keep spelling the logical route. Pass prefix_game=False when deliberately probing the
+    removed root paths.
+    """
+    if prefix_game and path.startswith("/api/"):
+        path = "/g/{0}{1}".format(GAME_APP_ID, path)
     url = BASE_URL + path
     request_headers = dict(headers or {})
     data = None
@@ -324,8 +338,20 @@ def login(steam_id, ticket):
 # ------------------------------------------------------------------------------ main
 
 def run(args):
-    global BASE_URL
+    global BASE_URL, GAME_APP_ID
     BASE_URL = args.base_url.rstrip("/")
+    GAME_APP_ID = args.app_id.strip().strip("/")
+
+    # 玩家 API 只在 /g/{appId}/api/... 下提供，没有根路径也没有默认游戏：
+    # 没给对 AppID 的话，下面每条检查都会撞在同一个 404 game_not_found 上，
+    # 与其让人对着十几条失败猜，不如在这里说清楚。
+    if not GAME_APP_ID.isdigit():
+        write(
+            "--app-id must be the numeric Steam AppID of the game to probe "
+            "(the player API lives under /g/<appId>); got '{0}'".format(GAME_APP_ID),
+            _Ansi.RED,
+        )
+        return 2
 
     steam_id_a = args.steam_id_a or new_steam_id()
     steam_id_b = args.steam_id_b or new_steam_id()
@@ -334,6 +360,7 @@ def run(args):
     mode = "debug login (debugSteamId)" if use_debug_login else "real ticket"
 
     write("Target : {0}".format(BASE_URL))
+    write("Game   : /g/{0}".format(GAME_APP_ID))
     write("Mode   : {0}".format(mode))
     write("PlayerA: {0}".format(steam_id_a))
     write("PlayerB: {0}".format(steam_id_b))
@@ -386,7 +413,12 @@ def run(args):
             _Ansi.YELLOW,
         )
         write(
-            "  500 -> Steam:ApiKey / Steam:AppId missing from appsettings.Development.json",
+            "  401 steam_unavailable -> this game has no Steam AppID or credential yet;"
+            " configure it in the admin UI (Game / Steam credential pages)",
+            _Ansi.YELLOW,
+        )
+        write(
+            "  404 game_not_found -> this instance has no game with AppID '{0}'; pass --app-id".format(GAME_APP_ID),
             _Ansi.YELLOW,
         )
         return 1
@@ -417,9 +449,15 @@ def run(args):
     )
     claim_names = list(payload.keys()) if isinstance(payload, dict) else []
     assert_true(
-        "JWT carries only sub/jti/iss/aud/exp/nbf",
+        "JWT carries only the expected claims (sub/game/jti/iss/aud/exp/nbf)",
         all(claim in ALLOWED_JWT_CLAIMS for claim in claim_names),
         "claims={0}".format(",".join(claim_names)),
+    )
+    # 令牌绑定游戏：路径里的 AppID 与声明必须指向同一个游戏，否则跨游戏重放就成立了。
+    assert_true(
+        "JWT carries a numeric game claim",
+        str(sget(payload, "game") or "").isdigit(),
+        "game={0}".format(show(sget(payload, "game"))),
     )
 
     # Player B always logs in through the debug body here; only the debug mode asserts it.
@@ -477,7 +515,7 @@ def run(args):
     )
     assert_true(
         "201 Location points at the new feedback",
-        create.location == "/api/feedback/{0}".format(feedback_id),
+        create.location == "/g/{0}/api/feedback/{1}".format(GAME_APP_ID, feedback_id),
         "Location={0}".format(create.location),
     )
 
@@ -757,6 +795,11 @@ def build_parser():
         "--base-url",
         default=DEFAULT_BASE_URL,
         help="base URL of the running instance (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--app-id",
+        default=DEFAULT_GAME_APP_ID,
+        help="Steam AppID of the game to probe (the player API lives under /g/<appId>); required",
     )
     parser.add_argument(
         "--ticket",

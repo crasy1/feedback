@@ -1,0 +1,143 @@
+@page "/admin/games"
+@layout GameFeedback.Components.Layout.AdminLayout
+@using GameFeedback.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject GameAdminService Games
+
+<PageTitle>游戏 - 游戏反馈系统</PageTitle>
+
+<h1>游戏</h1>
+
+<p class="note">
+    玩家 API 只在 <code>/g/&lt;Steam AppID&gt;/api/...</code> 下提供。客户端<b>不需要手抄这个数字</b>：
+    宿主把当前游戏运行的 Steam AppID 交给插件，插件自动补全路径。所以
+    <code>FeedbackConfig.BaseUrl</code> 只填反馈服务地址（如 <code>https://feedback.example.com</code>），
+    这里的 AppID 必须与客户端实际运行的 AppID 一致。
+</p>
+
+@if (_message is not null)
+{
+    <p class="note">@_message</p>
+}
+@if (_error is not null)
+{
+    <p class="error">@_error</p>
+}
+
+<div class="filter-actions">
+    <a class="button-link primary" href="/admin/games/new">添加游戏</a>
+</div>
+
+@if (_games is null)
+{
+    <p class="state">加载中…</p>
+}
+else if (_games.Count == 0)
+{
+    <p class="state">还没有任何游戏。玩家在你添加第一个游戏并配好 Steam 凭据之前无法登录。</p>
+}
+else
+{
+    <div class="table-scroll">
+        <table class="feedback-table">
+            <thead>
+                <tr>
+                    <th>名称</th>
+                    <th>Steam AppID</th>
+                    <th>票据 identity</th>
+                    <th>凭据</th>
+                    <th>状态</th>
+                    <th>反馈</th>
+                    <th>玩家</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var game in _games)
+                {
+                    <tr>
+                        <td>@game.Name</td>
+                        <td>
+                            @if (string.IsNullOrWhiteSpace(game.SteamAppId))
+                            {
+                                @* AppID 为空的行只可能是升级迁移为存量数据建的占位游戏：它不可寻址。 *@
+                                <span class="badge badge-bug">未填 AppID（不可寻址）</span>
+                            }
+                            else
+                            {
+                                <code>@game.SteamAppId</code>
+                            }
+                        </td>
+                        <td>@game.Identity</td>
+                        <td>@(game.CredentialName ?? "—")</td>
+                        <td>
+                            @if (!game.IsConfigured)
+                            {
+                                <span class="badge badge-progress">配置未完成</span>
+                            }
+                            else if (game.IsActive)
+                            {
+                                <span class="badge badge-resolved">启用</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-closed">已停用</span>
+                            }
+                        </td>
+                        <td>@game.FeedbackCount</td>
+                        <td>@game.PlayerCount</td>
+                        <td class="actions-cell">
+                            <a href="/admin/games/@game.Id/edit">编辑</a>
+                            @if (_pendingDeleteId == game.Id)
+                            {
+                                <button class="danger" @onclick="() => DeleteAsync(game.Id)">确认删除</button>
+                                <button @onclick="() => _pendingDeleteId = null">取消</button>
+                            }
+                            else
+                            {
+                                <button @onclick="() => _pendingDeleteId = game.Id">删除</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<GameAdminView>? _games;
+    private int? _pendingDeleteId;
+    private string? _error;
+    private string? _message;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _pendingDeleteId = null;
+        _games = await Games.ListAsync(CancellationToken.None);
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        _error = null;
+        _message = null;
+        _pendingDeleteId = null;
+
+        switch (await Games.DeleteAsync(id, CancellationToken.None))
+        {
+            case GameDeleteOutcome.Deleted:
+                _message = "游戏已删除。";
+                break;
+            case GameDeleteOutcome.HasData:
+                // 硬删会把反馈与玩家一起带走，所以这里拒绝并引导改用停用。
+                _error = "这个游戏名下已经有反馈或玩家，不能删除。请改为在编辑页取消「启用」来停用它。";
+                break;
+            case GameDeleteOutcome.NotFound:
+                _error = "游戏不存在。";
+                break;
+        }
+
+        _games = await Games.ListAsync(CancellationToken.None);
+    }
+}

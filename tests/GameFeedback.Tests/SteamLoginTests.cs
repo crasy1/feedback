@@ -11,17 +11,12 @@ namespace GameFeedback.Tests;
 [Collection("Integration")]
 public sealed class SteamLoginTests(IntegrationTestFixture fixture)
 {
+    private TestGame Game => fixture.DefaultGame;
+
     private (GameFeedbackApplicationFactory Factory, FakeSteamHandler Steam) CreateSteamFactory()
     {
         var steam = new FakeSteamHandler();
         return (fixture.CreateFactory(steam), steam);
-    }
-
-    private static async Task<JsonElement> PostLoginAsync(HttpClient client, object body)
-    {
-        var response = await client.PostAsJsonAsync("/api/auth/steam", body);
-        var content = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<JsonElement>(content);
     }
 
     private static string? PayloadSub(string accessToken)
@@ -39,6 +34,20 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         return JsonDocument.Parse(json).RootElement.TryGetProperty("sub", out var sub) ? sub.GetString() : null;
     }
 
+    /// <summary>解码 JWT 载荷里的游戏声明（<c>game</c>），值为游戏数字 Id 的字符串。</summary>
+    private static string? PayloadGame(string accessToken)
+    {
+        var parts = accessToken.Split('.');
+        var payload = parts[1].Replace('-', '+').Replace('_', '/');
+        switch (payload.Length % 4)
+        {
+            case 2: payload += "=="; break;
+            case 3: payload += "="; break;
+        }
+        var json = Encoding.UTF8.GetString(Convert.FromBase64String(payload));
+        return JsonDocument.Parse(json).RootElement.TryGetProperty("game", out var game) ? game.GetString() : null;
+    }
+
     [Fact]
     public async Task Valid_ticket_returns_token_and_creates_player()
     {
@@ -48,13 +57,15 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         steam.SetProfileResponse(FakeSteamHandler.Profile("Gordon", "https://cdn.example/avatar.png"));
 
         var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "valid-ticket-hex" });
+        var response = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "valid-ticket-hex" });
 
         Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         var accessToken = body.GetProperty("accessToken").GetString();
         Assert.False(string.IsNullOrEmpty(accessToken));
         Assert.Equal(steamId, PayloadSub(accessToken!));
+        // 令牌必须绑定到路径里的游戏，否则换一个游戏的前缀就能拿同一张令牌用。
+        Assert.Equal(Game.Id.ToString(), PayloadGame(accessToken!));
         Assert.Equal(steamId, body.GetProperty("player").GetProperty("steamId").GetString());
         Assert.Equal("Gordon", body.GetProperty("player").GetProperty("steamName").GetString());
     }
@@ -70,7 +81,7 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         steam.SetProfileResponse(FakeSteamHandler.Profile("LongTicket", null));
 
         var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = new string('a', 5120) });
+        var response = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = new string('a', 5120) });
 
         Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
     }
@@ -83,7 +94,7 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         steam.EnqueueTicketResponse(FakeSteamHandler.TicketRejected());
 
         var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "bad-ticket" });
+        var response = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "bad-ticket" });
 
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -97,7 +108,7 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         steam.EnqueueTicketResponse(FakeSteamHandler.SteamServerError());
 
         var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "some-ticket" });
+        var response = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "some-ticket" });
 
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -114,7 +125,7 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var playersBeforeLogin = await db.Players.CountAsync();
-        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "bad-ticket" });
+        var response = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "bad-ticket" });
         var debugBody = await response.Content.ReadAsStringAsync();
         Assert.True(response.StatusCode == System.Net.HttpStatusCode.Unauthorized, $"status={response.StatusCode} body={debugBody}");
         Assert.Equal(playersBeforeLogin, await db.Players.CountAsync());
@@ -127,7 +138,7 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         steam.EnqueueTicketResponse(FakeSteamHandler.TicketMissingSteamId());
 
         var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "ticket" });
+        var response = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "ticket" });
 
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -139,7 +150,7 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         steam.EnqueueTicketResponse(FakeSteamHandler.SteamServerError());
 
         var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "ticket" });
+        var response = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "ticket" });
 
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -151,7 +162,7 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         steam.EnqueueTicketResponse(FakeSteamHandler.MalformedJson());
 
         var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "ticket" });
+        var response = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "ticket" });
 
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -176,7 +187,7 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var playersBeforeLogin = await db.Players.CountAsync();
 
-        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "ticket" });
+        var response = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "ticket" });
 
         Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Equal(playersBeforeLogin, await db.Players.CountAsync());
@@ -203,11 +214,11 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         steam.EnqueueTicketResponses(FakeSteamHandler.TicketOk(steamId), 2);
         steam.SetProfileResponse(FakeSteamHandler.Profile("Stored name", "https://cdn.example/stored.png"));
         var client = factory.CreateClient();
-        var firstLogin = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "first-ticket" });
+        var firstLogin = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "first-ticket" });
         Assert.Equal(System.Net.HttpStatusCode.OK, firstLogin.StatusCode);
         steam.SetProfileResponse(FakeSteamHandler.Payload(payload));
 
-        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "second-ticket" });
+        var response = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "second-ticket" });
 
         Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -216,7 +227,8 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         Assert.Equal("https://cdn.example/stored.png", body.GetProperty("player").GetProperty("avatarUrl").GetString());
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var player = await db.Players.SingleAsync(p => p.SteamId == steamId);
+        // 玩家是按 (GameId, SteamId) 定位的：只按 SteamId 查在多游戏下会选到别的游戏的行。
+        var player = await db.Players.SingleAsync(p => p.GameId == Game.Id && p.SteamId == steamId);
         Assert.Equal("Stored name", player.SteamName);
         Assert.Equal("https://cdn.example/stored.png", player.AvatarUrl);
     }
@@ -229,7 +241,7 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         steam.SetProfileResponse(FakeSteamHandler.SteamServerError());
 
         var client = factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "ticket" });
+        var response = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "ticket" });
 
         Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -246,12 +258,14 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         steam.SetProfileResponse(FakeSteamHandler.Profile("Renamed", "https://cdn.example/new.png"));
 
         var client = factory.CreateClient();
-        await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "t1" });
-        await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "t2" });
+        await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "t1" });
+        await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "t2" });
 
         var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var players = await db.Players.Where(p => p.SteamId == steamId).ToListAsync();
+        var players = await db.Players
+            .Where(p => p.GameId == Game.Id && p.SteamId == steamId)
+            .ToListAsync();
         var player = Assert.Single(players);
         Assert.Equal("Renamed", player.SteamName);
         Assert.Equal("https://cdn.example/new.png", player.AvatarUrl);
@@ -268,11 +282,11 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         // 前 10 次请求正常处理（票据被拒 → 401），第 11 次被限流 → 429。
         for (var i = 0; i < 10; i++)
         {
-            var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = $"t{i}" });
+            var response = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = $"t{i}" });
             Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
         }
 
-        var limited = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "t11" });
+        var limited = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "t11" });
         Assert.Equal(System.Net.HttpStatusCode.TooManyRequests, limited.StatusCode);
     }
 
@@ -282,14 +296,60 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         var (factory, steam) = CreateSteamFactory();
         var client = factory.CreateClient();
 
-        var missing = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "" });
+        var missing = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "" });
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, missing.StatusCode);
 
         // 上限是 8192（真实 5120 字符票据必须被接受，见 Real_world_ticket_length_is_accepted），
         // 所以"超长"必须真的超过 8192：早先这里的字面量是 5000，在上限上调到 8192 后落进了接受区间。
-        var oversized = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = new string('x', 8193) });
+        var oversized = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = new string('x', 8193) });
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, oversized.StatusCode);
 
         Assert.Empty(steam.RequestedPaths);
+    }
+
+    /// <summary>票据请求必须带上路径里那个游戏的 AppID 与 identity——游戏归属因此是被证明的，不是被声明的。</summary>
+    [Fact]
+    public async Task Ticket_verification_uses_the_games_own_app_id_and_identity()
+    {
+        var game = await fixture.SeedGameAsync(steamAppId: TestGames.UniqueAppId(), identity: "custom-identity");
+        var steam = new FakeSteamHandler();
+        steam.EnqueueTicketResponse(FakeSteamHandler.TicketOk("76561198000000042"));
+        steam.SetProfileResponse(FakeSteamHandler.Profile("Scoped", null));
+        var factory = fixture.CreateFactory(steam);
+        var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(game.AuthPath, new { ticket = "ticket" });
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+
+        var ticketCall = Assert.Single(
+            steam.RequestedPaths, p => p.Contains("AuthenticateUserTicket", StringComparison.Ordinal));
+        Assert.Contains($"appid={game.AppId}", ticketCall);
+        Assert.Contains("identity=custom-identity", ticketCall);
+    }
+
+    /// <summary>请求体里带游戏字段也没用：游戏只来自路径（AppID 段）。</summary>
+    [Fact]
+    public async Task Body_cannot_redirect_login_to_another_game()
+    {
+        var other = await fixture.SeedGameAsync();
+        const string steamId = "76561198000000043";
+        var steam = new FakeSteamHandler();
+        steam.EnqueueTicketResponse(FakeSteamHandler.TicketOk(steamId));
+        steam.SetProfileResponse(FakeSteamHandler.Profile("BodySpoofer", null));
+        var factory = fixture.CreateFactory(steam);
+        var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            Game.AuthPath,
+            new { ticket = "ticket", gameId = other.Id, appId = other.AppId, steamAppId = other.AppId });
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(Game.Id.ToString(), PayloadGame(body.GetProperty("accessToken").GetString()!));
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        Assert.Equal(0, await db.Players.CountAsync(p => p.GameId == other.Id && p.SteamId == steamId));
+        Assert.Equal(1, await db.Players.CountAsync(p => p.GameId == Game.Id && p.SteamId == steamId));
     }
 }

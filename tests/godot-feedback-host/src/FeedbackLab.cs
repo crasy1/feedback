@@ -18,6 +18,11 @@ public partial class FeedbackLab : Control
     /// <summary>
     /// 默认指向本机 compose 栈（docker compose --env-file .env.local up -d --build → 127.0.0.1:3000）。
     /// 用 dotnet run 起服务时改成 http://localhost:5087。
+    /// <para>
+    /// 这里<b>只填反馈服务的地址</b>：玩家 API 的 <c>/g/{appId}</c> 前缀由 <see cref="LabAppIdProvider"/>
+    /// 提供的 Steam AppID 自动补全（它读的就是 steamworks 那份 <c>SteamConfig.AppId</c>），
+    /// 所以接入时不需要手抄任何标识字符串。
+    /// </para>
     /// </summary>
     private const string DefaultBaseUrl = "http://127.0.0.1:3000";
 
@@ -346,7 +351,7 @@ public partial class FeedbackLab : Control
             DebugSteamId = _steamId.Text.Trim(),
             CacheAccessToken = false,
             VerboseLogging = true,
-        });
+        }, gameAppIdProvider: new LabAppIdProvider());
     }
 
     /// <summary>provider 可能在后台线程被调用，日志必须经 CallDeferred 回到主线程再写节点。</summary>

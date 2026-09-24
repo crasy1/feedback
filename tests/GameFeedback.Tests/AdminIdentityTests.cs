@@ -51,6 +51,60 @@ public sealed class AdminIdentityTests(IntegrationTestFixture fixture)
         Assert.Equal(HttpStatusCode.OK, admin.StatusCode);
     }
 
+    /// <summary>
+    /// 首次运行：库里一个游戏都没有时，登录成功后必须被送到"添加游戏"页，
+    /// 因为在那之前后台除了建游戏什么都做不了（没有任何游戏可供配置或浏览）。
+    /// <para>
+    /// 这里覆盖的是登录后的重定向（Razor Page，静态 SSR，HTTP 层可断）。
+    /// 布局里那道守卫（<c>AdminLayout.razor</c> 的 OnAfterRenderAsync → HasAnyAsync）跑在
+    /// InteractiveServer 电路里，而 App.razor 用的是 <c>prerender: false</c>，
+    /// HTTP 响应里根本没有渲染后的标记，所以那道守卫只能用服务层行为来近似覆盖
+    /// （见 <c>GameAdminServiceTests.HasAny_is_false_on_an_empty_database_and_true_after_the_first_game</c>）。
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task First_run_admin_login_redirects_to_the_add_game_page()
+    {
+        var factory = await fixture.CreateFactoryOnEmptyDatabaseAsync();
+        var client = NewClient(factory);
+
+        var token = await GetAntiForgeryTokenAsync(client, "/admin/login");
+        var response = await client.PostAsync("/admin/login", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["Email"] = TestEmail,
+            ["Password"] = TestPassword,
+            ["__RequestVerificationToken"] = token,
+        }));
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.True(response.Headers.Location?.ToString().EndsWith("/admin/games/new"),
+            $"空库登录后应重定向到 /admin/games/new，实际 {response.Headers.Location}");
+    }
+
+    /// <summary>守卫会重定向的那些页面本身必须仍然可达，否则空库状态会把自己锁死（重定向死循环）。</summary>
+    [Fact]
+    public async Task First_run_exempt_pages_stay_reachable_on_an_empty_database()
+    {
+        var factory = await fixture.CreateFactoryOnEmptyDatabaseAsync();
+        var client = NewClient(factory);
+
+        var token = await GetAntiForgeryTokenAsync(client, "/admin/login");
+        var login = await client.PostAsync("/admin/login", new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["Email"] = TestEmail,
+            ["Password"] = TestPassword,
+            ["__RequestVerificationToken"] = token,
+        }));
+        Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+
+        // 添加游戏页是空库状态下唯一的出口，必须放行（否则守卫会把它自己也拦掉 → 死循环）。
+        // 页面本身是 InteractiveServer + prerender:false，HTTP 层只能验"路由与授权放行"。
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/admin/games/new")).StatusCode);
+        // 登录/登出页与静态资源同样不该被守卫波及。
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/admin/login")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/admin.css")).StatusCode);
+    }
+
     [Fact]
     public async Task Unauthenticated_admin_request_redirects_to_login()
     {

@@ -39,6 +39,12 @@ public partial class FeedbackClient : Node
     /// </summary>
     public ITicketProvider TicketProvider { get; set; } = UnavailableTicketProvider.Instance;
 
+    /// <summary>
+    /// 当前游戏运行的 Steam AppID 来源。宿主实现了它，插件就自动把玩家 API 的路径补成
+    /// <c>/g/{appId}/api/...</c>，接入方不必手抄标识；不实现则沿用"BaseUrl 里自带路径"的老行为。
+    /// </summary>
+    public IGameAppIdProvider GameAppIdProvider { get; set; } = UnavailableGameAppIdProvider.Instance;
+
     /// <summary>当前使用的配置；未显式设置时在 <c>_Ready</c> 里按约定路径加载。</summary>
     public FeedbackConfig? Config => _config;
 
@@ -57,8 +63,11 @@ public partial class FeedbackClient : Node
         _runtime = null;
     }
 
-    /// <summary>替换配置/票据来源；下次调用操作时重建内部运行时。</summary>
-    public void Configure(FeedbackConfig? config = null, ITicketProvider? ticketProvider = null)
+    /// <summary>替换配置/票据来源/AppID 来源；下次调用操作时重建内部运行时。</summary>
+    public void Configure(
+        FeedbackConfig? config = null,
+        ITicketProvider? ticketProvider = null,
+        IGameAppIdProvider? gameAppIdProvider = null)
     {
         if (config is not null)
         {
@@ -67,6 +76,10 @@ public partial class FeedbackClient : Node
         if (ticketProvider is not null)
         {
             TicketProvider = ticketProvider;
+        }
+        if (gameAppIdProvider is not null)
+        {
+            GameAppIdProvider = gameAppIdProvider;
         }
         _runtime?.Dispose();
         _runtime = null;
@@ -197,7 +210,10 @@ public partial class FeedbackClient : Node
             _config.ToOptions(),
             TicketProvider,
             _config.CacheAccessToken ? new UserTokenStore() : new InMemoryTokenStore(),
-            new GodotFeedbackLog(_config.VerboseLogging));
+            new GodotFeedbackLog(_config.VerboseLogging),
+            messageHandler: null,
+            timeProvider: null,
+            gameAppIdProvider: GameAppIdProvider);
         return _runtime;
     }
 

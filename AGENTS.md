@@ -9,9 +9,12 @@ Product overview and scope: `docs/overview.md`. Architecture and deployment: `do
 These rules are mandatory. Violating any of them fails the task.
 
 - Never trust client-supplied identity. The SteamID comes from the validated JWT / authenticated principal, never from query, body, or headers.
-- Steam verification failures fail closed. A successful HTTP response from Steam alone is not enough; validate the response payload and require a valid SteamID64. If Steam verification is unavailable, do not authenticate.
+- A player request's Game comes from its `/g/{appId}` path prefix, and the access token's `game` claim must equal that Game. Never take a game identifier from the request body, and never let a token minted for one Game authorize another.
+- Steam verification failures fail closed. A successful HTTP response from Steam alone is not enough; validate the response payload and require a valid SteamID64. If Steam verification is unavailable — including when the resolved Game has no usable credential — do not authenticate. (A Game with no Steam AppID is not addressable at all, so it can never reach the login endpoint.)
 - A player JWT must never authorize administrator operations. Players and admins are two separate identity systems.
-- Enforce ownership at the query level. A player may only read or comment on feedback owned by the authenticated Steam account; prefer `404` when the resource is missing or belongs to another player.
+- Enforce ownership at the query level. A player may only read or comment on feedback owned by the authenticated Steam account within the Game they authenticated for; prefer `404` when the resource is missing, owned by another player, or belongs to another Game.
+- The Steam Publisher Web API Key is stored encrypted in the database and is **write-only** in the admin UI: never render it back into HTML (including the form re-render after a validation failure), never return it in a DTO, never log it. Credential-change log lines carry only the admin user id and the fact of the change. The Data Protection key ring is a secret: persist it, back it up, never commit it.
+- Never delete player data as a side effect. `Feedback → Game` and `Player → Game` are `Restrict`; deleting a Game or a credential that is in use is refused in the domain (the admin UI renders the refusal), and disabling is the intended alternative.
 - Treat all player text as untrusted. Use plain text for the MVP; if rich text is added later, sanitize before rendering.
 - Keep JWTs short-lived. Validate signature, issuer, audience, and expiration. Do not put sensitive information in JWT payloads.
 - Never expose or commit secrets: Steam Publisher Web API Key, JWT signing key, database password, admin password.
@@ -68,6 +71,8 @@ Avoid: generic repository wrappers over EF Core, unnecessary interfaces, reflect
 ## Data Rules
 
 - Use EF Core + Npgsql. Use migrations for all persisted schema changes.
+- One instance serves several **Games**, addressed by their Steam AppID. `games` is the authority for Steam AppIDs, ticket identities, enabled state and credential assignment; the admin UI is how these are edited at runtime, and changes take effect without a restart. Never reintroduce a deployment-wide AppID, a "default game", or a self-invented slug for addressing.
+- Steam credentials live in `steam_credentials`, encrypted with ASP.NET Core Data Protection. One credential serves many Games. There is no seeding or import from environment variables: a fresh database has no Games at all, and the admin UI forces the first Game to be created.
 - When changing database models: update model/configuration → create migration → inspect generated migration → apply in development → build/test.
 - Do not edit production schema manually, drop/recreate databases without explicit instruction, or silently delete migrations.
 - Store timestamps in UTC.

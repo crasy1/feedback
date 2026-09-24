@@ -13,6 +13,8 @@ namespace GameFeedback.Tests;
 [Collection("Integration")]
 public sealed class DebugLoginTests(IntegrationTestFixture fixture)
 {
+    private TestGame Game => fixture.DefaultGame;
+
     private static Action<Dictionary<string, string>> DevSettings() => settings =>
     {
         settings["environment"] = "Development";
@@ -29,12 +31,49 @@ public sealed class DebugLoginTests(IntegrationTestFixture fixture)
         var client = factory.CreateClient();
 
         var steamId = PlayerClient.UniqueSteamId();
-        var response = await client.PostAsJsonAsync("/api/auth/steam", new { debugSteamId = steamId });
+        var response = await client.PostAsJsonAsync(Game.AuthPath, new { debugSteamId = steamId });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(steamId, body.GetProperty("player").GetProperty("steamId").GetString());
         Assert.DoesNotContain(steam.RequestedPaths, p => p.Contains("AuthenticateUserTicket"));
+    }
+
+    /// <summary>
+    /// 调试登录不需要该游戏配好凭据：验票本来就被跳过了。
+    /// 但游戏仍然必须**可寻址**（有 AppID）且在启用状态——这条路径绕过的只是 Steam，不是寻址。
+    /// </summary>
+    [Fact]
+    public async Task Debug_login_works_on_a_game_without_a_credential()
+    {
+        var unconfigured = await fixture.SeedGameAsync(withCredential: false);
+        var steam = new FakeSteamHandler();
+        var factory = fixture.CreateFactory(steam, extraSettings: DevSettings());
+
+        var response = await factory.CreateClient()
+            .PostAsJsonAsync(unconfigured.AuthPath, new { debugSteamId = PlayerClient.UniqueSteamId() });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(steam.RequestedPaths); // 连资料都不查：没有可用凭据。
+    }
+
+    /// <summary>
+    /// 升级迁移建的那行占位游戏（SteamAppId 为 NULL）不可寻址：即使打开调试开关也解析不到它，
+    /// 因为解析发生在验票开关之前。用它的数据库 Id 拼路径也一样。
+    /// </summary>
+    [Fact]
+    public async Task Debug_login_cannot_reach_a_game_without_an_app_id()
+    {
+        var placeholder = await fixture.SeedGameAsync(withAppId: false);
+        var factory = fixture.CreateFactory(extraSettings: DevSettings());
+        var client = factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync(
+            TestGame.PathForAppId(placeholder.Id.ToString(), "auth/steam"),
+            new { debugSteamId = PlayerClient.UniqueSteamId() });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("game_not_found", await TestGames.ReadProblemCodeAsync(response));
     }
 
     [Fact]
@@ -44,12 +83,12 @@ public sealed class DebugLoginTests(IntegrationTestFixture fixture)
         steam.SetProfileResponse(FakeSteamHandler.Profile("Debugger", null));
         var factory = fixture.CreateFactory(steam, extraSettings: DevSettings());
         var client = factory.CreateClient();
-        var login = await client.PostAsJsonAsync("/api/auth/steam", new { debugSteamId = PlayerClient.UniqueSteamId() });
+        var login = await client.PostAsJsonAsync(Game.AuthPath, new { debugSteamId = PlayerClient.UniqueSteamId() });
         login.EnsureSuccessStatusCode();
         var body = await login.Content.ReadFromJsonAsync<JsonElement>();
         var token = body.GetProperty("accessToken").GetString();
 
-        var mine = new System.Net.Http.HttpRequestMessage(HttpMethod.Get, "/api/feedback/mine");
+        var mine = new System.Net.Http.HttpRequestMessage(HttpMethod.Get, Game.MinePath);
         mine.Headers.Authorization = new("Bearer", token);
         var response = await client.SendAsync(mine);
 
@@ -64,7 +103,7 @@ public sealed class DebugLoginTests(IntegrationTestFixture fixture)
 
         foreach (var bad in new[] { "123", "7656119800000000x", "z" })
         {
-            var response = await client.PostAsJsonAsync("/api/auth/steam", new { debugSteamId = bad });
+            var response = await client.PostAsJsonAsync(Game.AuthPath, new { debugSteamId = bad });
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         }
     }
@@ -79,7 +118,7 @@ public sealed class DebugLoginTests(IntegrationTestFixture fixture)
         var client = factory.CreateClient();
 
         // 开关开启但请求未带 debugSteamId 时，必须仍走真实验票流程。
-        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "ticket" });
+        var response = await client.PostAsJsonAsync(Game.AuthPath, new { ticket = "ticket" });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains(steam.RequestedPaths, p => p.Contains("AuthenticateUserTicket"));

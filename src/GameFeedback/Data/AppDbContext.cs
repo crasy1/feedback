@@ -7,6 +7,10 @@ namespace GameFeedback.Data;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbContext<IdentityUser>(options)
 {
+    public DbSet<Game> Games => Set<Game>();
+
+    public DbSet<SteamCredential> SteamCredentials => Set<SteamCredential>();
+
     public DbSet<Player> Players => Set<Player>();
 
     public DbSet<Feedback> Feedbacks => Set<Feedback>();

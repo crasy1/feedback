@@ -10,7 +10,7 @@ namespace GdFeedback;
 /// </summary>
 /// <param name="BaseUrl">反馈服务地址，例如 <c>http://localhost:5087</c>；必须是绝对的 http/https 地址。</param>
 /// <param name="Identity">
-/// Steam 票据 identity，必须与服务端 <c>Steam:Identity</c> 一致（默认 <c>feedback-api</c>）。
+/// Steam 票据 identity，必须与反馈服务端为该游戏配置的票据 identity 一致（默认 <c>feedback-api</c>）。
 /// 只有宿主出票时用得到，但放在这里是为了让两端不一致时能立刻发现。
 /// </param>
 /// <param name="RequestTimeoutSeconds">单次请求超时（秒），必须为正数。</param>
@@ -48,6 +48,7 @@ public sealed class FeedbackRuntime : IDisposable
 
     private readonly FeedbackOptions _options;
     private readonly ITicketProvider _ticketProvider;
+    private readonly IGameAppIdProvider _gameAppIdProvider;
     private readonly ITokenStore _tokenStore;
     private readonly IFeedbackLog _log;
     private readonly TimeProvider _timeProvider;
@@ -63,19 +64,21 @@ public sealed class FeedbackRuntime : IDisposable
         ITokenStore? tokenStore = null,
         IFeedbackLog? log = null,
         HttpMessageHandler? messageHandler = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        IGameAppIdProvider? gameAppIdProvider = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         _options = options;
         _ticketProvider = ticketProvider ?? UnavailableTicketProvider.Instance;
+        _gameAppIdProvider = gameAppIdProvider ?? UnavailableGameAppIdProvider.Instance;
         _log = log ?? NullFeedbackLog.Instance;
         _timeProvider = timeProvider ?? TimeProvider.System;
 
         // 令牌只交给宿主注入的存储；默认实现只在内存里保存，落盘与否由宿主决定。
         _tokenStore = tokenStore ?? new InMemoryTokenStore();
 
-        _configurationFailure = ValidateConfiguration(options, out Uri? baseUri);
+        _configurationFailure = ValidateConfiguration(options, _gameAppIdProvider, out Uri? baseUri);
         if (_configurationFailure is not null)
         {
             return;
@@ -162,6 +165,9 @@ public sealed class FeedbackRuntime : IDisposable
             FeedbackFailure failure = await DescribeFailureAsync(response, cancellationToken);
             // 登录端点的 401/400 语义比通用映射更具体：出票或验票问题，与"令牌过期"无关。
             // 但"Steam 压根没验成"（服务端 code=steam_unavailable）要保留为可重试的独立错误码。
+            // 404/403 在这里同样是配置问题：登录端点上它们只可能表示"BaseUrl 里的游戏不存在"
+            // 与"那个游戏被停用了"。必须单独成码——否则宿主会收到通用的 not_found 文案
+            // （"反馈不存在或不属于当前玩家"），而登录时根本没有 feedback 这回事。
             failure = response.StatusCode switch
             {
                 HttpStatusCode.Unauthorized when failure.Code != FeedbackErrorCode.SteamVerificationUnavailable => failure with
@@ -173,6 +179,16 @@ public sealed class FeedbackRuntime : IDisposable
                 {
                     Code = FeedbackErrorCode.TicketInvalid,
                     Message = WithDetail("the server rejected the ticket", failure.Detail),
+                },
+                HttpStatusCode.NotFound => failure with
+                {
+                    Code = FeedbackErrorCode.GameNotFound,
+                    Message = WithDetail("the feedback server has no game at this base URL path", failure.Detail),
+                },
+                HttpStatusCode.Forbidden => failure with
+                {
+                    Code = FeedbackErrorCode.GameDisabled,
+                    Message = WithDetail("this game is disabled on the feedback server", failure.Detail),
                 },
                 _ => failure,
             };
@@ -308,7 +324,8 @@ public sealed class FeedbackRuntime : IDisposable
     /// <summary>服务端在 ProblemDetails 扩展成员 <c>code</c> 里声明的"Steam 没验成"（网络/超时/凭据没配）。</summary>
     private const string SteamUnavailableCode = "steam_unavailable";
 
-    private static FeedbackFailure? ValidateConfiguration(FeedbackOptions options, out Uri? baseUri)
+    private static FeedbackFailure? ValidateConfiguration(
+        FeedbackOptions options, IGameAppIdProvider gameAppIdProvider, out Uri? baseUri)
     {
         baseUri = null;
         if (string.IsNullOrWhiteSpace(options.BaseUrl)
@@ -325,7 +342,7 @@ public sealed class FeedbackRuntime : IDisposable
         {
             return new FeedbackFailure(
                 FeedbackErrorCode.InvalidConfiguration,
-                "Identity must match the server's Steam:Identity and must not be empty",
+                "Identity must match the ticket identity configured for this game on the feedback server, and must not be empty",
                 0,
                 false);
         }
@@ -338,11 +355,37 @@ public sealed class FeedbackRuntime : IDisposable
                 false);
         }
 
+        // 玩家 API 的路径是 /g/{appId}/api/...。宿主给出 AppID 时由插件补全，
+        // 接入方就不必手抄任何标识字符串；宿主没给（或给了空白）就沿用"BaseUrl 里自带路径"的老行为。
+        string? appId = gameAppIdProvider.GetSteamAppId();
+        if (!string.IsNullOrWhiteSpace(appId))
+        {
+            string trimmed = appId.Trim();
+            // 给了但不像 AppID：这一定是宿主的接线 bug，fail closed 而不是拼出一个必然 404 的 URL。
+            // "全 0" 与服务端 GameValidation 的口径保持一致（Steam 没有 0 号应用）。
+            if (trimmed.Length > MaxAppIdLength
+                || !trimmed.All(char.IsAsciiDigit)
+                || trimmed.All(c => c == '0'))
+            {
+                return new FeedbackFailure(
+                    FeedbackErrorCode.InvalidConfiguration,
+                    $"the host reported an AppID that is not a valid Steam application id ('{trimmed}'); "
+                    + "it must be digits only, at most 10 characters, and not all zeros",
+                    0,
+                    false);
+            }
+
+            parsed = new Uri(parsed.AbsoluteUri.TrimEnd('/') + "/g/" + trimmed, UriKind.Absolute);
+        }
+
         // 必须带尾斜杠，否则 HttpClient 会把相对路径的末段替换掉。
         string normalized = parsed.AbsoluteUri.EndsWith('/') ? parsed.AbsoluteUri : parsed.AbsoluteUri + "/";
         baseUri = new Uri(normalized, UriKind.Absolute);
         return null;
     }
+
+    /// <summary>Steam AppID 的位数上限，与数据库列长一致。</summary>
+    private const int MaxAppIdLength = 10;
 
     private static HttpMessageHandler CreateDefaultHandler(string? proxy)
     {

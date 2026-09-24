@@ -1,4 +1,8 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@using GameFeedback.Services
+@inject GameAdminService Games
+@inject NavigationManager Navigation
 
 @* 管理端布局：顶栏导航 + 内容区。样式集中在 wwwroot/admin.css（由 App.razor 引入）。
    文本为简体中文（自用运维工具，暂不做本地化）。 *@
@@ -8,6 +12,8 @@
         <span class="admin-title">游戏反馈系统 · 管理端</span>
         <nav>
             <a href="/admin/feedback">反馈列表</a>
+            <a href="/admin/games">游戏</a>
+            <a href="/admin/credentials">Steam 凭据</a>
             <a href="/admin/logout">退出登录</a>
         </nav>
     </header>
@@ -15,3 +21,60 @@
         @Body
     </main>
 </div>
+
+@code {
+    private bool _guarding;
+
+    protected override void OnInitialized()
+    {
+        // 布局在同一个电路里只初始化一次，所以导航事件必须显式订阅，否则守卫只看得到首个页面。
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await GuardAsync();
+        }
+    }
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => _ = InvokeAsync(GuardAsync);
+
+    /// <summary>
+    /// 一个游戏都没有时，后台除了「添加游戏」什么都做不了，直接把管理员送过去。
+    /// <para>
+    /// 这道闸必须放在布局里而不是只放在登录成功那一处：Blazor 的交互式路由不经过
+    /// ASP.NET Core 中间件，只在登录后跳一次既挡不住地址栏直接输入，也挡不住电路内的导航。
+    /// </para>
+    /// </summary>
+    private async Task GuardAsync()
+    {
+        if (_guarding || IsFirstRunExemptPage())
+        {
+            return;
+        }
+
+        _guarding = true;
+        try
+        {
+            if (!await Games.HasAnyAsync(CancellationToken.None))
+            {
+                Navigation.NavigateTo("/admin/games/new", replace: true);
+            }
+        }
+        finally
+        {
+            _guarding = false;
+        }
+    }
+
+    /// <summary>添加游戏页是空库状态下唯一的出口，必须豁免，否则自锁成重定向死循环。</summary>
+    private bool IsFirstRunExemptPage()
+    {
+        var path = Navigation.ToBaseRelativePath(Navigation.Uri).TrimEnd('/');
+        return path is "admin/games/new" or "admin/login" or "admin/logout";
+    }
+}

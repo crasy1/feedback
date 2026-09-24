@@ -112,8 +112,9 @@ def main() -> int:
             f"Password={postgres_password}"
         ),
         "Database__AutoMigrate": "true",
-        "Steam__ApiKey": value("STEAM_API_KEY", "unset"),
-        "Steam__AppId": value("STEAM_APP_ID", "unset"),
+        # Steam 的凭据/AppID/identity 已搬进数据库，本地不再从环境变量注入；
+        # 本机跑起来后登录管理端，在「Steam 凭据」与「游戏」页面里配置。
+        "DataProtection__KeysPath": value("DATAPROTECTION_KEYS_PATH", str(repo_root / ".keys-local")),
         "Steam__DebugSkipTicketValidation": value("STEAM_DEBUG_SKIP", "false"),
         "Jwt__Issuer": value("JWT_ISSUER", "GameFeedback"),
         "Jwt__Audience": value("JWT_AUDIENCE", "GameFeedbackClient"),

@@ -1,5 +1,7 @@
 # Spec: Steam Game Feedback System — MVP
 
+> **已被后续升级部分取代（2026-09-24，多游戏支持）**：本 spec 的 out-of-scope 清单里「多租户」仍然成立（不做按租户的物理隔离与独立部署），但**「一个实例只服务一个游戏」不再成立**：现在一个实例按 Steam AppID 服务多个 Game，玩家与反馈按游戏隔离。权威说明见 `docs/adr/0007-multi-game-support.md` 与 `.scratch/multi-game/spec.md`。
+
 Status: ready-for-agent
 
 ## Problem Statement

@@ -54,11 +54,14 @@ public class FeedbackService(AppDbContext db, ILogger<FeedbackService> logger)
 
     private static bool IsOverLong(string? value, int maxLength) => value?.Length > maxLength;
 
-    /// <summary>解析 SteamID 对应的玩家 Id；玩家不存在返回 null（fail closed）。</summary>
-    public async Task<int?> ResolvePlayerIdAsync(string steamId, CancellationToken cancellationToken)
+    /// <summary>
+    /// 解析某个 Game 下 SteamID 对应的玩家 Id；玩家不存在返回 null（fail closed）。
+    /// GameId 必须来自请求路径解析结果，SteamID 必须来自认证主体。
+    /// </summary>
+    public async Task<int?> ResolvePlayerIdAsync(int gameId, string steamId, CancellationToken cancellationToken)
     {
         var player = await db.Players
-            .Where(p => p.SteamId == steamId)
+            .Where(p => p.GameId == gameId && p.SteamId == steamId)
             .Select(p => (int?)p.Id)
             .SingleOrDefaultAsync(cancellationToken);
         return player;
@@ -69,7 +72,8 @@ public class FeedbackService(AppDbContext db, ILogger<FeedbackService> logger)
     /// <see cref="SteamPlaytimeService"/> 取好后传入——本服务刻意只依赖 <c>AppDbContext</c>，
     /// 不注入 HTTP 依赖。取不到时长时传 <c>null</c>。
     /// </summary>
-    public async Task<Feedback> CreateAsync(int playerId, CreateFeedbackRequest request, int? playtimeMinutes, CancellationToken cancellationToken)
+    public async Task<Feedback> CreateAsync(
+        int gameId, int playerId, CreateFeedbackRequest request, int? playtimeMinutes, CancellationToken cancellationToken)
     {
         // 自动采集字段按"不可信、咨询性"处理：越界即丢弃并记 Warning，
         // 绝不因为玩家的机器信息让整条反馈失败（那样玩家会白写一遍正文）。
@@ -78,6 +82,7 @@ public class FeedbackService(AppDbContext db, ILogger<FeedbackService> logger)
 
         var feedback = new Feedback
         {
+            GameId = gameId,
             PlayerId = playerId,
             Type = Enum.Parse<FeedbackType>(request.Type!, ignoreCase: true),
             Title = request.Title!,
@@ -143,22 +148,26 @@ public class FeedbackService(AppDbContext db, ILogger<FeedbackService> logger)
         return value;
     }
 
-    /// <summary>玩家自己的反馈（最新在前，最多 100 条）。查询层即所有权边界。</summary>
-    public Task<List<Feedback>> ListOwnAsync(int playerId, CancellationToken cancellationToken) =>
+    /// <summary>
+    /// 玩家在指定 Game 下自己的反馈（最新在前，最多 100 条）。
+    /// GameId 与 PlayerId 同时进 WHERE，所有权边界在查询层就是游戏内的。
+    /// </summary>
+    public Task<List<Feedback>> ListOwnAsync(int gameId, int playerId, CancellationToken cancellationToken) =>
         db.Feedbacks
-            .Where(f => f.PlayerId == playerId)
+            .Where(f => f.GameId == gameId && f.PlayerId == playerId)
             .OrderByDescending(f => f.CreatedAt).ThenByDescending(f => f.Id)
             .Take(MineMaxItems)
             .ToListAsync(cancellationToken);
 
     /// <summary>
-    /// 读取属主玩家的单条反馈（含评论）。
-    /// 不存在或不属于该玩家一律返回 null——对外表现为 404。
+    /// 读取属主玩家在指定 Game 下的单条反馈（含评论）。
+    /// 不存在、不属于该玩家、或不属于该 Game 一律返回 null——对外表现为 404。
     /// </summary>
-    public Task<Feedback?> GetOwnAsync(int playerId, int feedbackId, CancellationToken cancellationToken) =>
+    public Task<Feedback?> GetOwnAsync(int gameId, int playerId, int feedbackId, CancellationToken cancellationToken) =>
         db.Feedbacks
             .Include(f => f.Comments.OrderBy(c => c.CreatedAt).ThenBy(c => c.Id))
-            .SingleOrDefaultAsync(f => f.Id == feedbackId && f.PlayerId == playerId, cancellationToken);
+            .SingleOrDefaultAsync(
+                f => f.Id == feedbackId && f.GameId == gameId && f.PlayerId == playerId, cancellationToken);
 
     /// <summary>校验评论内容；返回错误消息，null 表示通过。</summary>
     public static string? ValidateComment(string? content)

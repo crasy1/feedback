@@ -7,6 +7,14 @@ public class Feedback
 {
     public int Id { get; set; }
 
+    /// <summary>
+    /// 这条反馈属于哪个 Game。管理端是全局的（管理员看得到所有游戏），
+    /// 但每条反馈与每次 Steam 查询都严格限定在这一个 Game 内。
+    /// </summary>
+    public int GameId { get; set; }
+
+    public Game? Game { get; set; }
+
     public int PlayerId { get; set; }
 
     public Player? Player { get; set; }

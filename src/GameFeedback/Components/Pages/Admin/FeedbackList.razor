@@ -5,6 +5,7 @@
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
 @inject AdminFeedbackService AdminFeedbacks
+@inject GameAdminService Games
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
@@ -13,6 +14,22 @@
 <h1>反馈列表</h1>
 
 <div class="filters">
+    <label>
+        游戏
+        <select @bind="GameFilter">
+            <option value="">全部游戏</option>
+            @* 筛选值就是 AppID（与玩家 API 的路径段同一个标识）；未填 AppID 的占位游戏无法被筛选。 *@
+            @foreach (var game in _games.Where(g => !string.IsNullOrWhiteSpace(g.SteamAppId)))
+            {
+                <option value="@game.SteamAppId">@game.Name（@game.SteamAppId）@(game.IsActive ? string.Empty : "（已停用）")</option>
+            }
+            @if (_unknownGameFilter is not null)
+            {
+                @* 保留这个选项，否则浏览器会显示"全部游戏"、而实际筛选的是这个未知标识——界面在撒谎。 *@
+                <option value="@_unknownGameFilter">@_unknownGameFilter（不存在）</option>
+            }
+        </select>
+    </label>
     <label>
         状态
         <select @bind="StatusFilter">
@@ -45,6 +62,12 @@
     </div>
 </div>
 
+@if (_unknownGameFilter is not null)
+{
+    @* 不回退成"全部游戏"：静默放大查询范围正是这个仓库已经修过一次的事故类型。 *@
+    <p class="error">筛选条件里的游戏「@_unknownGameFilter」不存在，所以下面不会有任何结果。</p>
+}
+
 @if (_actionError is not null)
 {
     <p class="error">@_actionError</p>
@@ -70,6 +93,7 @@ else
             <thead>
                 <tr>
                     <th>ID</th>
+                    <th>游戏</th>
                     <th>类型</th>
                     <th>标题</th>
                     <th>玩家</th>
@@ -84,6 +108,7 @@ else
                 {
                     <tr>
                         <td>@feedback.Id</td>
+                        <td>@(feedback.Game?.Name ?? "—")</td>
                         <td><span class="badge @FeedbackTypeDisplay.GetCssClass(feedback.Type)">@feedback.Type</span></td>
                         <td class="title-cell"><a href="/admin/feedback/@feedback.Id">@feedback.Title</a></td>
                         <td>
@@ -158,6 +183,9 @@ else
     [SupplyParameterFromQuery(Name = "player")]
     public string? Player { get; set; }
 
+    [SupplyParameterFromQuery(Name = "game")]
+    public string? Game { get; set; }
+
     private string StatusFilter
     {
         get => Status ?? string.Empty;
@@ -182,7 +210,21 @@ else
         set => Player = string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
+    private string GameFilter
+    {
+        get => Game ?? string.Empty;
+        set => Game = string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private IReadOnlyList<GameAdminView> _games = [];
     private IReadOnlyList<Domain.Feedback>? _items;
+
+    /// <summary>
+    /// URL 里给了一个不存在的 AppID。空值/缺省表示"全部游戏"，但一个具体不存在的值必须显式暴露：
+    /// 静默退化成"全部游戏"会把筛选范围悄悄放大。
+    /// </summary>
+    private string? _unknownGameFilter =>
+        string.IsNullOrWhiteSpace(Game) || _games.Any(g => g.SteamAppId == Game) ? null : Game;
     private int _total;
     private string? _actionError;
     private string? _clipboardMessage;
@@ -194,12 +236,15 @@ else
         Enum.TryParse<FeedbackStatus>(Status, ignoreCase: true, out var status) ? status : null,
         Enum.TryParse<FeedbackType>(Type, ignoreCase: true, out var type) ? type : null,
         GameVersion,
-        Player);
+        Player,
+        Game);
 
     protected override async Task OnParametersSetAsync()
     {
         Page = Math.Max(1, Page);
         PageSize = Math.Clamp(PageSize <= 0 ? AdminFeedbackService.DefaultPageSize : PageSize, 1, AdminFeedbackService.MaxPageSize);
+        // 筛选下拉要列出全部游戏（含已停用的：它们的数据仍然可见）。
+        _games = await Games.ListAsync(CancellationToken.None);
         await ReloadAsync();
     }
 

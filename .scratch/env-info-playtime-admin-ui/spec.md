@@ -1,5 +1,7 @@
 # Spec: 环境信息、游玩时长与管理端玩家筛选
 
+> **已被后续升级部分取代（2026-09-24，多游戏支持）**：本 spec 里「`players` 表不加字段、不改迁移」「`SteamId` 全局唯一」「`Steam:ApiKey` 是部署配置」这三条**不再成立**。现状：`players` 增加了必填 `GameId`、唯一索引改为 `(GameId, SteamId)` 复合；玩家 API 移到 `/g/{appId}/api/...`（按 Steam AppID 寻址）；Steam 的 AppID、identity 与 Publisher Key 已按游戏存进数据库、由管理端维护。本文件作为**历史记录**保留原样，权威说明见 `docs/adr/0007-multi-game-support.md`、`docs/adr/0008-steam-configuration-in-the-database.md` 与 `.scratch/multi-game/spec.md`。
+
 Status: resolved
 
 来源：一次 grilling 会话（决策树全部落定）。原始需求："增加用户表，首次提交反馈时记录用户 steamId、昵称、头像；反馈接口中加上用户反馈时 steam 游玩游戏的时间；优化管理员界面 UI，可以通过用户筛选；反馈增加 CPU、GPU、内存信息。"

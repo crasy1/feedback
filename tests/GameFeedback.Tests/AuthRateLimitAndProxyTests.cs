@@ -75,7 +75,7 @@ public sealed class AuthRateLimitAndProxyTests(IntegrationTestFixture fixture)
         });
     }
 
-    private static async Task<HttpContext> LoginAsync(GameFeedbackApplicationFactory factory, string remoteIp, string? forwardedIp = null)
+    private async Task<HttpContext> LoginAsync(GameFeedbackApplicationFactory factory, string remoteIp, string? forwardedIp = null)
     {
         using var body = new MemoryStream(Encoding.UTF8.GetBytes("{\"ticket\":\"test-ticket\"}"));
         return await factory.Server.SendAsync(context =>
@@ -83,7 +83,7 @@ public sealed class AuthRateLimitAndProxyTests(IntegrationTestFixture fixture)
             context.Connection.RemoteIpAddress = IPAddress.Parse(remoteIp);
             context.Request.Scheme = "https";
             context.Request.Method = "POST";
-            context.Request.Path = "/api/auth/steam";
+            context.Request.Path = fixture.DefaultGame.AuthPath;
             context.Request.ContentType = "application/json";
             context.Request.ContentLength = body.Length;
             context.Request.Body = body;

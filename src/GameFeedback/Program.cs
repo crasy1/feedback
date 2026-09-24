@@ -8,6 +8,7 @@ using GameFeedback.Data;
 using GameFeedback.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -30,13 +31,26 @@ builder.Services.AddDbContextFactory<AppDbContext>(options =>
 
 builder.Services.AddOptions<SteamOptions>()
     .Bind(builder.Configuration.GetSection("Steam"))
-    .ValidateDataAnnotations()
     // 跳过 Steam 验票的调试开关只允许在 Development 生效：生产配置了它直接拒绝启动，
     // 保证“Steam 验证不可用时不认证”这条安全不变量不被配置绕过。
     .Validate(
         options => !options.DebugSkipTicketValidation || builder.Environment.IsDevelopment(),
         "Steam:DebugSkipTicketValidation 只能在 Development 环境启用")
     .ValidateOnStart();
+
+// Steam 凭据（Publisher Web API Key）加密用的 Data Protection。
+// application name 必须显式钉死：默认值取自 content root 路径，镜像一换就可能变，
+// 而 key ring 是按 application name 派生隔离的——一旦对不上，已存凭据将永久无法解密。
+// key ring 本身必须落在持久卷上并纳入备份（见 docker-compose.yml 的 keys 卷）。
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "keys");
+}
+Directory.CreateDirectory(dataProtectionKeysPath);
+builder.Services.AddDataProtection()
+    .SetApplicationName("GameFeedback")
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
 
 builder.Services.AddOptions<JwtOptions>()
     .Bind(builder.Configuration.GetSection("Jwt"))
@@ -63,6 +77,10 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<FeedbackService>();
 builder.Services.AddScoped<AdminFeedbackService>();
+builder.Services.AddScoped<GameResolver>();
+builder.Services.AddScoped<GameAdminService>();
+builder.Services.AddScoped<SteamCredentialService>();
+builder.Services.AddScoped<ApiKeyProtector>();
 builder.Services.AddScoped<AdminSeeder>();
 
 builder.Services.AddCascadingAuthenticationState();
@@ -145,36 +163,18 @@ builder.Services.AddRateLimiter(options =>
         }));
 });
 
-static string GetPlayerPartitionKey(HttpContext context) =>
-    context.User.FindFirst("sub")?.Value
-    ?? context.Connection.RemoteIpAddress?.ToString()
-    ?? "unknown";
-
-/// <summary>Steam 凭据没配好就大声提醒：这种配置下真实票据登录必然失败（fail closed）。</summary>
-static void WarnAboutPlaceholderSteamConfiguration(WebApplication application)
+/// <summary>
+/// 玩家侧写入的分区键：按 (Game, SteamID) 拆开，避免一个游戏里的提交吃掉另一个游戏的额度；
+/// 路由值在限流中间件运行时已经可用（限流中间件在路由之后执行）。
+/// </summary>
+static string GetPlayerPartitionKey(HttpContext context)
 {
-    SteamOptions steam = application.Services.GetRequiredService<IOptions<SteamOptions>>().Value;
-    bool apiKeyMissing = IsPlaceholderSteamValue(steam.ApiKey);
-    bool appIdMissing = IsPlaceholderSteamValue(steam.AppId);
-    if (!apiKeyMissing && !appIdMissing)
-    {
-        return;
-    }
-
-    application.Logger.LogWarning(
-        "Steam 凭据看起来是占位值（Steam:ApiKey={ApiKeyState} Steam:AppId={AppIdState}）：真实票据登录会以 " +
-        "401 steam_unavailable 失败。只有开启 Steam:DebugSkipTicketValidation 的调试登录仍可用。",
-        apiKeyMissing ? "占位" : "已设置",
-        appIdMissing ? "占位" : "已设置");
+    var steamId = context.User.FindFirst("sub")?.Value
+        ?? context.Connection.RemoteIpAddress?.ToString()
+        ?? "unknown";
+    var appId = context.Request.RouteValues["appId"] as string;
+    return string.IsNullOrEmpty(appId) ? steamId : $"{appId}:{steamId}";
 }
-
-/// <summary>空值、compose 的 unset 默认值、示例里的尖括号占位都算"没配"。</summary>
-static bool IsPlaceholderSteamValue(string? value) =>
-    string.IsNullOrWhiteSpace(value)
-    || string.Equals(value, "unset", StringComparison.OrdinalIgnoreCase)
-    || string.Equals(value, "change-me", StringComparison.OrdinalIgnoreCase)
-    || value.Contains('<', StringComparison.Ordinal)
-    || value.Contains("your-", StringComparison.OrdinalIgnoreCase);
 
 // 保留框架的回环信任默认值，其他反向代理必须显式配置。
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -220,11 +220,12 @@ static JsonObject CommentRequestExample() => new()
     ["content"] = "补充：重启后问题依旧，驱动已是最新。",
 };
 
+// 玩家 API 的路径现在都带 /g/{appId} 前缀，所以按后缀匹配而不是全等。
 static JsonObject? RequestBodyExampleFor(string relativePath) => relativePath switch
 {
-    "/api/auth/steam" => LoginRequestExample(),
-    "/api/feedback" => FeedbackRequestExample(),
-    "/api/feedback/{id}/comments" => CommentRequestExample(),
+    _ when relativePath.EndsWith("/api/auth/steam", StringComparison.Ordinal) => LoginRequestExample(),
+    _ when relativePath.EndsWith("/api/feedback", StringComparison.Ordinal) => FeedbackRequestExample(),
+    _ when relativePath.EndsWith("/api/feedback/{id}/comments", StringComparison.Ordinal) => CommentRequestExample(),
     _ => null,
 };
 
@@ -251,7 +252,7 @@ if (enableSwaggerDocs)
             };
             foreach (var (pathKey, pathItem) in document.Paths)
             {
-                if (!pathKey.StartsWith("/api/feedback"))
+                if (!pathKey.Contains("/api/feedback", StringComparison.Ordinal))
                 {
                     continue;
                 }
@@ -310,10 +311,6 @@ if (enableSwaggerDocs)
 
 var app = builder.Build();
 
-// Steam 凭据是占位值（compose 的 ${VAR:-unset} 默认值、示例模板）时，真实票据登录会全部 401。
-// 启动就把话说清楚，别让人对着客户端的 ticket/verification 错误码猜。
-WarnAboutPlaceholderSteamConfiguration(app);
-
 // 必须最先执行，限流按 IP 分区才能取到真实客户端地址。
 app.UseForwardedHeaders();
 
@@ -341,10 +338,18 @@ if (!app.Environment.IsDevelopment())
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
+/// <summary>
+/// 玩家 API 的路径前缀。玩家路由现在都在 <c>/g/{appId}/api/...</c> 下，
+/// 所以"这是不是玩家 API 请求"必须同时看两个前缀——只看 <c>/api</c> 会把玩家请求当成浏览器页面处理。
+/// </summary>
+static bool IsPlayerApiRequest(HttpContext context) =>
+    context.Request.Path.StartsWithSegments("/g")
+    || context.Request.Path.StartsWithSegments("/api");
+
 // 状态码页重执行只作用于浏览器端 Blazor 页面：API 的 4xx 响应
 // 必须原样返回，否则 POST /not-found 会把响应体替换成防伪错误。
 app.UseWhen(
-    context => !context.Request.Path.StartsWithSegments("/api"),
+    context => !IsPlayerApiRequest(context),
     branch => branch.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true));
 app.UseHttpsRedirection();
 
@@ -369,17 +374,29 @@ app.Use(async (context, next) =>
     await next(context);
 });
 
-// 防伪校验只作用于浏览器端 Blazor 页面；/api 走 JWT（无 Cookie），对 CSRF 免疫。
+// 防伪校验只作用于浏览器端 Blazor 页面；玩家 API 走 JWT（无 Cookie），对 CSRF 免疫。
 app.UseWhen(
-    context => !context.Request.Path.StartsWithSegments("/api"),
+    context => !IsPlayerApiRequest(context),
     branch => branch.UseAntiforgery());
 
 app.MapStaticAssets();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
-app.MapAuthEndpoints();
-app.MapFeedbackEndpoints();
+// 玩家 API 一律挂在 /g/{appId} 之下：客户端本来就运行在某个 Steam AppID 下，由宿主把它交给
+// 插件自动补全路径，接入时不必手抄任何标识字符串。
+var playerApi = app.MapGroup("/g/{appId}")
+    .AddEndpointFilter<ResolveGameFilter>();
+playerApi.MapAuthEndpoints();
+playerApi.MapFeedbackEndpoints();
+
+// 根路径上的玩家 API 已永久移除。这里给出稳定的 game_required（而不是一个空白 404），
+// 因为这次变更之后最常见的线上故障就是「某个游戏的构建还把 BaseUrl 指向根路径」。
+foreach (var method in new[] { "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS" })
+{
+    app.MapMethods("/api", [method], () => ApiProblems.GameRequired()).ExcludeFromDescription();
+    app.MapMethods("/api/{**rest}", [method], () => ApiProblems.GameRequired()).ExcludeFromDescription();
+}
 
 if (enableSwaggerDocs)
 {

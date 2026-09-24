@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-using GameFeedback.Data;
 using GameFeedback.Domain;
 using GameFeedback.Services;
 using GameFeedback.Tests.Infrastructure;
@@ -16,9 +15,11 @@ public sealed class FeedbackLoopTests(IntegrationTestFixture fixture)
     [Fact]
     public async Task Admin_reply_and_status_are_visible_to_owner_player()
     {
+        var game = fixture.DefaultGame;
+
         // 玩家通过 API 提交反馈。
         var (factory, playerClient, _) = await PlayerClient.CreateAsync(fixture, PlayerClient.UniqueSteamId());
-        var created = await playerClient.PostAsJsonAsync("/api/feedback", new Dictionary<string, object?>
+        var created = await playerClient.PostAsJsonAsync(game.FeedbackPath, new Dictionary<string, object?>
         {
             ["type"] = "Bug",
             ["title"] = "回环测试",
@@ -35,7 +36,7 @@ public sealed class FeedbackLoopTests(IntegrationTestFixture fixture)
         await adminFeedbacks.ChangeStatusAsync(feedbackId, FeedbackStatus.InProgress, CancellationToken.None);
 
         // 玩家在自己的详情里看到管理员回复与新状态。
-        var detailResponse = await playerClient.GetAsync($"/api/feedback/{feedbackId}");
+        var detailResponse = await playerClient.GetAsync(game.Api($"feedback/{feedbackId}"));
         Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
         var detail = await detailResponse.Content.ReadFromJsonAsync<JsonElement>();
 

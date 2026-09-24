@@ -35,6 +35,8 @@ internal static class Program
         await Run("login 401 maps to steam_verification_rejected", LoginRejectedAsync);
         await Run("login 401 with steam_unavailable is reported as retryable", LoginUnavailableAsync);
         await Run("login 401 with steam_ticket_rejected carries the server reason", LoginRejectedWithReasonAsync);
+        await Run("login 404 maps to game_not_found, never to the generic not_found", LoginGameNotFoundAsync);
+        await Run("login 403 maps to game_disabled", LoginGameDisabledAsync);
         await Run("debug login stays off unless enabled", DebugLoginOffByDefaultAsync);
         await Run("debug login sends debugSteamId when enabled", DebugLoginOnSendsSteamIdAsync);
         await Run("debug login rejects a malformed SteamID64", DebugLoginRejectsMalformedSteamIdAsync);
@@ -61,6 +63,9 @@ internal static class Program
         await Run("detail deserializes comments", DetailDeserializesAsync);
         await Run("comment posts content to the comment route", CommentPostsAsync);
         await Run("base url normalization keeps the api prefix", BaseUrlNormalizationAsync);
+        await Run("a host-provided AppID completes the /g/{appId} path", AppIdProviderCompletesGamePathAsync);
+        await Run("a non-numeric AppID fails closed without a request", NonNumericAppIdFailsClosedAsync);
+        await Run("an all-zero AppID fails closed without a request", AllZeroAppIdFailsClosedAsync);
         await Run("cancellation surfaces instead of turning into a transport failure", CancellationSurfacesAsync);
 
         Console.WriteLine($"HARNESS SUMMARY checks={_checks} failed={Failures.Count}");
@@ -192,7 +197,7 @@ internal static class Program
         {
             title = "Steam 验票服务不可用",
             status = 401,
-            detail = "Steam 没有给出结论（网络、超时，或本服务的 Steam:ApiKey / Steam:AppId 配置问题），稍后可以重试。",
+            detail = "Steam 没有给出结论（网络、超时，或该游戏的 Steam 凭据有问题），稍后可以重试。",
             code = "steam_unavailable",
         }));
         using FeedbackRuntime runtime = Runtime(handler);
@@ -203,7 +208,61 @@ internal static class Program
             FailureCode(result) == FeedbackErrorCode.SteamVerificationUnavailable,
             $"expected steam_verification_unavailable, got {FailureCode(result)}");
         Check(result.Failure!.Retryable, "Steam being unavailable must be retryable");
-        Check(result.Failure.Message.Contains("Steam:ApiKey", StringComparison.Ordinal), "the server reason must reach the host log");
+        Check(result.Failure.Message.Contains("凭据", StringComparison.Ordinal), "the server reason must reach the host log");
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 登录端点 404 只可能表示"BaseUrl 里的游戏路径在服务端不存在"。
+    /// 它绝不能被映射成通用的 not_found——那句文案说的是"反馈不存在或不属于当前玩家"，
+    /// 而登录时根本没有 feedback 这回事。多游戏改造后 slug 写错是最常见的接入事故，
+    /// 真机上第一次踩到时日志里只剩一句误导人的话。
+    /// </summary>
+    private static Task LoginGameNotFoundAsync()
+    {
+        StubHandler handler = new();
+        handler.RespondJson(HttpStatusCode.NotFound, Json(new
+        {
+            title = "游戏不存在",
+            status = 404,
+            detail = "路径里的游戏标识没有对应的游戏。",
+            code = "game_not_found",
+        }));
+        using FeedbackRuntime runtime = Runtime(handler);
+
+        FeedbackResult<PlayerSession> result = runtime.LoginAsync().GetAwaiter().GetResult();
+
+        Check(
+            FailureCode(result) == FeedbackErrorCode.GameNotFound,
+            $"expected game_not_found, got {FailureCode(result)}");
+        Check(result.Failure!.StatusCode == 404, "expected status 404");
+        Check(!result.Failure.Retryable, "a wrong game path is a configuration problem and must not be retried");
+        Check(
+            result.Failure.Message.Contains("base URL path", StringComparison.Ordinal),
+            $"the message must point at the base URL, got: {result.Failure.Message}");
+        return Task.CompletedTask;
+    }
+
+    /// <summary>登录端点 403 只可能表示"这个游戏被停用了"，同样是配置问题、重试无用。</summary>
+    private static Task LoginGameDisabledAsync()
+    {
+        StubHandler handler = new();
+        handler.RespondJson(HttpStatusCode.Forbidden, Json(new
+        {
+            title = "游戏已停用",
+            status = 403,
+            detail = "这个游戏已被管理员停用，不再接受登录与反馈。",
+            code = "game_disabled",
+        }));
+        using FeedbackRuntime runtime = Runtime(handler);
+
+        FeedbackResult<PlayerSession> result = runtime.LoginAsync().GetAwaiter().GetResult();
+
+        Check(
+            FailureCode(result) == FeedbackErrorCode.GameDisabled,
+            $"expected game_disabled, got {FailureCode(result)}");
+        Check(result.Failure!.StatusCode == 403, "expected status 403");
+        Check(!result.Failure.Retryable, "a disabled game is a configuration problem and must not be retried");
         return Task.CompletedTask;
     }
 
@@ -713,8 +772,71 @@ internal static class Program
         return Task.CompletedTask;
     }
 
-    private static async Task CancellationSurfacesAsync()
+    /// <summary>
+    /// 宿主给出 AppID 时，插件自动把玩家 API 的路径补成 <c>/g/{appId}/api/...</c>。
+    /// 这是"接入方不必手抄任何标识字符串"的全部实现——BaseUrl 只填服务地址。
+    /// </summary>
+    private static Task AppIdProviderCompletesGamePathAsync()
     {
+        StubHandler handler = new();
+        handler.RespondJson(HttpStatusCode.OK, LoginJson("token-appid"));
+        handler.RespondJson(HttpStatusCode.OK, "[]");
+        using FeedbackRuntime runtime = Runtime(handler, appIds: new StubAppIdProvider("1910980"));
+
+        runtime.ListMineAsync().GetAwaiter().GetResult();
+
+        Check(
+            handler.Requests[0].Path == "/g/1910980/api/auth/steam",
+            $"login must go to the game path, got {handler.Requests[0].Path}");
+        Check(
+            handler.Requests[1].Path == "/g/1910980/api/feedback/mine",
+            $"later calls must stay under the game path, got {handler.Requests[1].Path}");
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 宿主给的 AppID 不像 AppID（例如误把 slug 传了进来）时必须 fail closed：
+    /// 拼出一个必然 404 的 URL 只会把宿主的接线 bug 伪装成服务端故障，而那种故障最难查。
+    /// </summary>
+    private static Task NonNumericAppIdFailsClosedAsync()
+    {
+        StubHandler handler = new();
+        handler.RespondJson(HttpStatusCode.OK, LoginJson("never-used"));
+        using FeedbackRuntime runtime = Runtime(handler, appIds: new StubAppIdProvider("neon-drift"));
+
+        FeedbackResult<PlayerSession> result = runtime.LoginAsync().GetAwaiter().GetResult();
+
+        Check(
+            FailureCode(result) == FeedbackErrorCode.InvalidConfiguration,
+            $"expected invalid_configuration, got {FailureCode(result)}");
+        Check(handler.Requests.Count == 0, "a bad AppID must not produce a request at all");
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 全 0 不是合法的 Steam 应用号。口径与服务端 GameValidation 保持一致，
+    /// 否则插件会拼出一个必然 404 的路径，把宿主的接线 bug 伪装成服务端故障。
+    /// </summary>
+    private static Task AllZeroAppIdFailsClosedAsync()
+    {
+        foreach (string candidate in new[] { "0", "000" })
+        {
+            StubHandler handler = new();
+            handler.RespondJson(HttpStatusCode.OK, LoginJson("never-used"));
+            using FeedbackRuntime runtime = Runtime(handler, appIds: new StubAppIdProvider(candidate));
+
+            FeedbackResult<PlayerSession> result = runtime.LoginAsync().GetAwaiter().GetResult();
+
+            Check(
+                FailureCode(result) == FeedbackErrorCode.InvalidConfiguration,
+                $"expected invalid_configuration for AppID '{candidate}', got {FailureCode(result)}");
+            Check(handler.Requests.Count == 0, $"AppID '{candidate}' must not produce a request at all");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private static async Task CancellationSurfacesAsync()    {
         StubHandler handler = new();
         using FeedbackRuntime runtime = Runtime(handler);
         using CancellationTokenSource cancellation = new();
@@ -776,14 +898,16 @@ internal static class Program
         string baseUrl = "http://localhost:5087",
         string identity = "feedback-api",
         bool allowDebugLogin = false,
-        string? debugSteamId = null) =>
+        string? debugSteamId = null,
+        IGameAppIdProvider? appIds = null) =>
         new(
             new FeedbackOptions(baseUrl, identity, 15, allowDebugLogin, debugSteamId, null),
             tickets ?? new StubTicketProvider("test-ticket"),
             store,
             log,
             handler,
-            clock ?? new FixedClock());
+            clock ?? new FixedClock(),
+            appIds);
 
     private static string Json(object value) => JsonSerializer.Serialize(value, Web);
 
@@ -880,6 +1004,11 @@ internal static class Program
             }
             return _responders.Dequeue()(request);
         }
+    }
+
+    private sealed class StubAppIdProvider(string? appId) : IGameAppIdProvider
+    {
+        public string? GetSteamAppId() => appId;
     }
 
     private sealed class StubTicketProvider(string? ticket) : ITicketProvider

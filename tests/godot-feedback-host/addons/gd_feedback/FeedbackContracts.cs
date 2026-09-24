@@ -32,10 +32,24 @@ public static class FeedbackErrorCode
     public const string SteamVerificationRejected = "steam_verification_rejected";
 
     /// <summary>
-    /// 服务端没能完成验票：网络、超时，或服务端的 Steam 凭据（Steam:ApiKey / Steam:AppId）没配好。
+    /// 服务端没能完成验票：网络、超时，或该游戏在反馈服务后台还没配好 Steam 凭据
+    /// （AppID 或 Web API Key 缺失，凭据已改由后台按游戏管理）。
     /// 与本张票据是否有效无关，因此可重试——别把它当成"票不对"让玩家重登。
     /// </summary>
     public const string SteamVerificationUnavailable = "steam_verification_unavailable";
+
+    /// <summary>
+    /// 登录端点 404：反馈服务上没有这个 AppID 的游戏——该游戏还没在后台建出来，
+    /// 或宿主交出的 AppID 与该游戏配置的不一致。属于<b>配置</b>问题，重试无用，
+    /// 也不代表票据有问题。
+    /// </summary>
+    public const string GameNotFound = "game_not_found";
+
+    /// <summary>
+    /// 登录端点 403：BaseUrl 里的游戏在服务端已被停用。属于<b>配置</b>问题，重试无用，
+    /// 需要运营在后台重新启用；票据本身可能完全正常。
+    /// </summary>
+    public const string GameDisabled = "game_disabled";
 
     /// <summary>访问令牌缺失、过期或被拒（非登录端点的 401）。</summary>
     public const string Unauthorized = "unauthorized";

@@ -487,3 +487,9 @@ $RECYCLE.BIN/
 # .godot/ 是 Godot 的导入缓存与构建中间产物，不能提交。
 # 注意：不要忽略 *.uid —— addons/gd_feedback/ 里的 .cs.uid/.gd.uid 是随包交付物（在 addon.manifest.json 白名单里）。
 .godot/
+
+# Data Protection key ring（加密 Steam 凭据用；绝不能提交）
+# 默认落盘在内容根的 keys/；scripts/run_local.py 用仓库根的 .keys-local/。
+keys/
+.keys-local/
+**/keys/*.xml

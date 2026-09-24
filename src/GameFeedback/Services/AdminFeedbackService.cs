@@ -19,6 +19,12 @@ public class AdminFeedbackService(IDbContextFactory<AppDbContext> dbFactory)
 
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         var feedbacks = db.Feedbacks.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(query.Game))
+        {
+            // 按 Steam AppID 过滤（和玩家 API 的路径段是同一个标识）。null/空 = 全部游戏。
+            var gameAppId = query.Game.Trim();
+            feedbacks = feedbacks.Where(f => f.Game!.SteamAppId == gameAppId);
+        }
         if (query.Status.HasValue)
         {
             feedbacks = feedbacks.Where(f => f.Status == query.Status.Value);
@@ -48,6 +54,7 @@ public class AdminFeedbackService(IDbContextFactory<AppDbContext> dbFactory)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Include(f => f.Player)
+            .Include(f => f.Game)
             .ToListAsync(cancellationToken);
 
         return (items, total);
@@ -72,13 +79,17 @@ public class AdminFeedbackService(IDbContextFactory<AppDbContext> dbFactory)
             .Replace("_", LikeEscape + "_")
         + "%";
 
-    /// <summary>读取单条反馈（含玩家与全部评论）；不存在返回 null。</summary>
+    /// <summary>
+    /// 读取单条反馈（含玩家、游戏与全部评论）；不存在返回 null。
+    /// 管理员是全局身份，所以这里<b>不</b>按游戏过滤——游戏只用于展示与筛选。
+    /// </summary>
     public async Task<Feedback?> GetAsync(int id, CancellationToken cancellationToken)
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         return await db.Feedbacks
             .AsNoTracking()
             .Include(f => f.Player)
+            .Include(f => f.Game)
             .Include(f => f.Comments.OrderBy(c => c.CreatedAt).ThenBy(c => c.Id))
             .SingleOrDefaultAsync(f => f.Id == id, cancellationToken);
     }

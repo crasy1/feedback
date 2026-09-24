@@ -1,0 +1,164 @@
+@page "/admin/games/new"
+@page "/admin/games/{Id:int}/edit"
+@layout GameFeedback.Components.Layout.AdminLayout
+@using GameFeedback.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject GameAdminService Games
+@inject SteamCredentialService Credentials
+@inject NavigationManager Navigation
+
+<PageTitle>@(IsNew ? "添加游戏" : "编辑游戏") - 游戏反馈系统</PageTitle>
+
+<h1>@(IsNew ? "添加游戏" : "编辑游戏")</h1>
+
+@if (IsNew)
+{
+    <p class="note">
+        玩家在你保存这个游戏并给它配上 Steam 凭据之前无法登录。
+        <b>Steam AppID 就是玩家 API 的路径段</b>（<code>/g/&lt;AppID&gt;/api/...</code>），必须与客户端实际
+        运行的 AppID 一致——客户端由宿主自动提供这个数字，不需要手抄。
+    </p>
+}
+
+@if (_error is not null)
+{
+    <p class="error">@_error</p>
+}
+@if (_loadError is not null)
+{
+    <p class="error">@_loadError</p>
+}
+
+@if (!_loaded)
+{
+    <p class="state">加载中…</p>
+}
+else
+{
+    <section class="actions">
+        <label>
+            名称
+            <input @bind="_name" placeholder="如 Neon Drift" maxlength="100" />
+            <span class="hint">只在管理端显示，不参与寻址。</span>
+        </label>
+
+        <label>
+            Steam AppID
+            <input @bind="_steamAppId" placeholder="如 1910980" maxlength="10" inputmode="numeric" />
+            <span class="hint">
+                客户端请求的路径段。宿主把当前游戏运行的 AppID 交给插件自动补全，
+                所以这里填错就等于玩家请求落在一个不存在的游戏上（<code>404 game_not_found</code>）。
+            </span>
+        </label>
+
+        <label>
+            票据 identity
+            <input @bind="_identity" placeholder="feedback-api" maxlength="64" />
+            <span class="hint">必须与该游戏构建里 <code>FeedbackConfig.Identity</code> 一致。</span>
+        </label>
+
+        <label>
+            Steam 凭据
+            <select @bind="_credentialId">
+                <option value="">（未配置）</option>
+                @foreach (var credential in _credentials)
+                {
+                    <option value="@credential.Id">@credential.Name</option>
+                }
+            </select>
+            <span class="hint">凭据在 <a href="/admin/credentials">Steam 凭据</a> 页面管理，一份凭据可服务多个游戏。</span>
+        </label>
+
+        <label class="checkbox">
+            <input type="checkbox" @bind="_isActive" />
+            启用（停用的游戏拒绝登录与提交，但数据保留）
+        </label>
+
+        @if (_appIdChanged)
+        {
+            <p class="warn">
+                你正在修改 Steam AppID：<code>@_originalAppId</code> → <code>@GameValidation.NormalizeAppId(_steamAppId)</code>。
+                已存在的反馈仍属于这个游戏，不会迁移；但**只在这个新 AppID 下运行的客户端**才能再访问它——
+                如果这个改动写错了，玩家会拿到 <code>404 game_not_found</code>。
+            </p>
+        }
+
+        <div class="filter-actions">
+            <button class="primary" @onclick="SaveAsync">保存</button>
+            <a class="button-link" href="/admin/games">返回</a>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter]
+    public int? Id { get; set; }
+
+    private bool IsNew => Id is null;
+
+    private IReadOnlyList<CredentialAdminView> _credentials = [];
+    private bool _loaded;
+    private string _name = string.Empty;
+    private string _steamAppId = string.Empty;
+    private string _identity = GameValidation.DefaultIdentity;
+    private string _credentialId = string.Empty;
+    private bool _isActive = true;
+    private string? _originalAppId;
+    private string? _error;
+    private string? _loadError;
+
+    private bool _appIdChanged =>
+        !string.IsNullOrEmpty(_originalAppId)
+        && !string.Equals(_originalAppId, GameValidation.NormalizeAppId(_steamAppId), StringComparison.Ordinal);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loaded = false;
+        _loadError = null;
+        _credentials = await Credentials.ListAsync(CancellationToken.None);
+
+        if (!IsNew)
+        {
+            var game = await Games.GetAsync(Id!.Value, CancellationToken.None);
+            if (game is null)
+            {
+                _loadError = "游戏不存在。";
+                return;
+            }
+
+            _name = game.Name;
+            _steamAppId = game.SteamAppId ?? string.Empty;
+            _originalAppId = game.SteamAppId;
+            _identity = game.Identity;
+            _credentialId = game.CredentialId?.ToString() ?? string.Empty;
+            _isActive = game.IsActive;
+        }
+
+        _loaded = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+
+        var request = new GameEditRequest(
+            _name,
+            _steamAppId,
+            _identity,
+            int.TryParse(_credentialId, out var credentialId) ? credentialId : null,
+            _isActive);
+
+        var result = IsNew
+            ? await Games.CreateAsync(request, CancellationToken.None)
+            : await Games.UpdateAsync(Id!.Value, request, CancellationToken.None);
+
+        if (!result.Succeeded)
+        {
+            _error = result.Error;
+            return;
+        }
+
+        Navigation.NavigateTo("/admin/games");
+    }
+}

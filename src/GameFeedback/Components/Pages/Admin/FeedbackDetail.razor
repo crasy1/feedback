@@ -48,6 +48,16 @@ else
                 }
             </dd>
 
+            <dt>游戏</dt>
+            <dd>
+                @(_feedback.Game?.Name ?? "—")
+                @if (!string.IsNullOrWhiteSpace(_feedback.Game?.SteamAppId))
+                {
+                    <code>@_feedback.Game.SteamAppId</code>
+                    <a href="/admin/feedback?game=@_feedback.Game.SteamAppId">只看这个游戏</a>
+                }
+            </dd>
+
             <dt>游戏版本</dt>
             <dd>@(_feedback.GameVersion ?? "—")　构建号 @(_feedback.BuildNumber ?? "—")</dd>
 

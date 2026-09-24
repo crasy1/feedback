@@ -1,15 +1,21 @@
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace GameFeedback.Tests.Infrastructure;
 
 /// <summary>
 /// Steam HTTP 传输桩：按请求路径（AuthenticateUserTicket / GetPlayerSummaries /
 /// GetSingleGamePlaytime）返回罐头响应，供测试验证 fail-closed 各分支。
+/// <para>
+/// GetSingleGamePlaytime 可以按 appid 分别应答（<see cref="SetPlaytimeResponse(string, Func{HttpResponseMessage})"/>）：
+/// 多游戏下"每个游戏取到的是自己那份时长"只能这样证明，光看 URL 里的 appid 不够。
+/// </para>
 /// </summary>
 public sealed class FakeSteamHandler : HttpMessageHandler
 {
     private readonly Queue<Func<HttpResponseMessage>> _ticketResponses = new();
+    private readonly Dictionary<string, Func<HttpResponseMessage>> _playtimeByAppId = new(StringComparer.Ordinal);
     private Func<HttpResponseMessage>? _profileResponse;
     private Func<HttpResponseMessage>? _playtimeResponse;
 
@@ -43,6 +49,13 @@ public sealed class FakeSteamHandler : HttpMessageHandler
     public void SetPlaytimeResponse(Func<HttpResponseMessage>? responseFactory) =>
         _playtimeResponse = responseFactory;
 
+    /// <summary>
+    /// 按 AppID 分别指定 GetSingleGamePlaytime 的响应。两个游戏的用例据此证明
+    /// 每条反馈快照到的是<b>自己那个游戏</b>的时长，而不只是"URL 里的 appid 看起来对"。
+    /// </summary>
+    public void SetPlaytimeResponse(string appId, Func<HttpResponseMessage> responseFactory) =>
+        _playtimeByAppId[appId] = responseFactory;
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var path = request.RequestUri!.PathAndQuery;
@@ -71,6 +84,11 @@ public sealed class FakeSteamHandler : HttpMessageHandler
             if (PlaytimeDelay > TimeSpan.Zero)
             {
                 await Task.Delay(PlaytimeDelay, cancellationToken);
+            }
+            var appId = QueryHelpers.ParseQuery(request.RequestUri!.Query)["appid"].ToString();
+            if (_playtimeByAppId.TryGetValue(appId, out var perGame))
+            {
+                return perGame();
             }
             return (_playtimeResponse ?? Playtime(2361))();
         }

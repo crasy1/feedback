@@ -23,15 +23,17 @@ services:
       retries: 10
     restart: unless-stopped
 
-  app:
+  server:
     build: .
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=gamefeedback;Username=gamefeedback;Password=${POSTGRES_PASSWORD}
-      Steam__ApiKey: ${STEAM_API_KEY:-unset}
-      Steam__AppId: ${STEAM_APP_ID:-unset}
+      # Steam 配置（Publisher Web API Key / AppID / identity）不在环境变量里：按游戏存在数据库中，
+      # 由管理员在「游戏」与「Steam 凭据」页面维护。
+      # Data Protection key ring：加密 Steam 密钥用。这个卷必须备份——丢了它已存凭据就永久解不开。
+      DataProtection__KeysPath: /app/keys
       Steam__DebugSkipTicketValidation: ${STEAM_DEBUG_SKIP:-false}
       Jwt__Issuer: ${JWT_ISSUER:-GameFeedback}
       Jwt__Audience: ${JWT_AUDIENCE:-GameFeedbackClient}
@@ -41,6 +43,8 @@ services:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ReverseProxy__KnownProxies__0: ${REVERSE_PROXY_IP:-127.0.0.1}
       Swagger__Enabled: ${SWAGGER_ENABLED:-false}
+    volumes:
+      - data-protection-keys:/app/keys
     ports:
       # 仅绑定本机回环：公网入口由 Cloudflare Tunnel / Nginx / Caddy 承担
       - "127.0.0.1:3000:8080"
@@ -48,3 +52,4 @@ services:
 
 volumes:
   postgres-data:
+  data-protection-keys:

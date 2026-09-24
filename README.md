@@ -1,6 +1,7 @@
 # Steam Game Feedback System
 
 轻量级、自托管的 Steam 游戏反馈系统：玩家通过 Steam 认证提交反馈，管理员在 Blazor 后台审阅、回复并跟踪状态。
+一个部署可以同时服务**多个 Steam 游戏**（多 AppID）：每个游戏有独立的 Steam AppID 与凭据，玩家与反馈按游戏隔离；客户端用自己的 AppID 寻址，不需要手抄任何标识。
 
 架构与设计文档：[docs/overview.md](docs/overview.md) · 安全设计：[docs/security.md](docs/security.md) · 领域模型：[docs/domain-model.md](docs/domain-model.md) · 决策记录：[docs/adr/](docs/adr/)
 
@@ -69,10 +70,25 @@ python scripts/smoke_player_api.py     # 需要应用已在 http://localhost:508
 ## 全栈部署
 
 ```bash
-cp .env.example .env   # 填写 POSTGRES_PASSWORD、JWT_SIGNING_KEY（≥32 字符）、ADMIN_SEED_PASSWORD、Steam 密钥
+cp .env.example .env   # 填写 POSTGRES_PASSWORD、JWT_SIGNING_KEY（≥32 字符）、ADMIN_SEED_PASSWORD
 docker compose up -d --build
 curl http://127.0.0.1:3000/health
 ```
+
+### 首次配置（部署后必做）
+
+Steam 的凭据、AppID 与票据 identity **不在环境变量里**，而是按游戏存放在数据库中，由管理员在后台维护。
+所以一个全新部署在管理员配置完之前，**玩家登录会 fail closed**（`401 steam_unavailable`）：
+
+1. 打开 `/admin/login` 登录（账号来自 `ADMIN_SEED_EMAIL` / `ADMIN_SEED_PASSWORD`）。
+2. 数据库里还没有游戏时，后台会把你强制送到 **添加游戏** 页。
+3. 先在 **Steam 凭据** 页添加 Publisher Web API Key（密文入库、界面不回显；保存后点「验证」确认可用），
+   再回到 **游戏** 页填写名称、**Steam AppID**、票据 identity 并选中这份凭据（AppID 就是玩家 API 的路径段）。
+4. 把该游戏客户端构建的 `FeedbackConfig.BaseUrl` 指向 `https://<域名>`（**不要**带 `/g/...`），
+   并在宿主里实现 `IGameAppIdProvider` 交出当前运行的 Steam AppID——路径前缀由插件自动补全。
+
+备份时**必须一并备份 Data Protection key ring 卷**（compose 里的 `data-protection-keys`）：
+丢了它，数据库里已存的 Steam 凭据将永久无法解密。
 
 - 数据库在 Docker 网络内部，应用容器的 `8080` 映射至本机回环的 `3000`；公网入口由 Cloudflare Tunnel / Nginx / Caddy 承担。
 - 转发头仅接受回环或显式配置的代理。使用 Docker 时，将 `.env` 的 `REVERSE_PROXY_IP` 设置为应用实际看到的代理来源 IP（可能是网桥网关）；留空不会信任外部来源。可通过 `docker network inspect <网络名>` 核对网关与代理地址。代理须正确设置客户端 IP 和协议，否则 HTTPS 识别及按 IP 登录限流无法反映真实客户端。
@@ -84,9 +100,8 @@ curl http://127.0.0.1:3000/health
 | 键 | 说明 |
 |---|---|
 | `ConnectionStrings__DefaultConnection` | PostgreSQL 连接字符串 |
-| `Steam__ApiKey` / `Steam__AppId` | Steam Publisher Web API Key / 游戏 AppID |
 | `Steam__DebugSkipTicketValidation` | 调试开关：跳过 Steam 验票（登录请求带 `debugSteamId`）。仅 Development 可启用，生产配置会拒绝启动 |
-| `Steam__Identity` | 票据 identity，固定 `feedback-api` |
+| `DataProtection__KeysPath` | Data Protection key ring 目录，默认 `<内容根>/keys`；compose 固定为 `/app/keys` 并挂持久卷 |
 | `Jwt__Issuer` / `Jwt__Audience` / `Jwt__SigningKey` | 访问令牌签发配置（HS256，24 小时有效） |
 | `Admin__SeedEmail` / `Admin__SeedPassword` | 首个管理员（仅在数据库无管理员时创建） |
 | `Database__AutoMigrate` | 启动时自动迁移，默认 true |
@@ -94,19 +109,29 @@ curl http://127.0.0.1:3000/health
 | `RateLimit__AuthPerMinute` 等 | 限流配置，见 `docs/specs/player-api.md` |
 | `ReverseProxy__KnownProxies__0` 等 | 额外可信代理来源 IP；Compose 使用 `REVERSE_PROXY_IP`，默认仅回环 |
 
-**严禁**把真实密钥提交进仓库；生产配置一律通过环境变量 / `.env` 提供。
+**Steam 相关配置不是环境变量**：Publisher Web API Key（密文）、AppID 与票据 identity 都按游戏存在数据库里，
+在后台的「Steam 凭据」与「游戏」页面维护，改完立即生效、无需重启。
+
+**严禁**把真实密钥提交进仓库；`.env` / Data Protection key ring 都已在 `.gitignore` 中。
 
 ## 玩家 API（v1）
 
+玩家 API 一律挂在游戏的 **Steam AppID** 之下：
+
 ```text
-POST /api/auth/steam            { ticket }        → 访问令牌 + 玩家资料
-POST /api/feedback              创建反馈（Bearer 令牌）
-GET  /api/feedback/mine         自己的最近 100 条
-GET  /api/feedback/{id}         反馈详情（含评论；非本人返回 404）
-POST /api/feedback/{id}/comments 追加评论（仅限反馈属主）
+POST /g/{appId}/api/auth/steam            { ticket }        → 访问令牌 + 玩家资料
+POST /g/{appId}/api/feedback              创建反馈（Bearer 令牌）
+GET  /g/{appId}/api/feedback/mine         自己的最近 100 条
+GET  /g/{appId}/api/feedback/{id}         反馈详情（含评论；非本人返回 404）
+POST /g/{appId}/api/feedback/{id}/comments 追加评论（仅限反馈属主）
 ```
 
-详细契约与限额：[docs/specs/player-api.md](docs/specs/player-api.md)。Godot 客户端通过 `GetAuthTicketForWebApi("feedback-api")` 获取票据后调用登录端点。
+根路径上的 `/api/...` 已**永久移除**，返回 `404` 与 `code = game_required`。
+访问令牌里带 `game` 声明：一个游戏里换来的令牌拿到另一个游戏的路径下使用会被拒（`401 game_mismatch`）。
+
+详细契约与错误码：[docs/specs/player-api.md](docs/specs/player-api.md)。Godot 客户端把 `FeedbackConfig.BaseUrl`
+指向反馈服务地址（**不带** `/g/...`），宿主通过 `IGameAppIdProvider` 交出当前运行的 Steam AppID，
+插件自动补全路径；再用 `GetAuthTicketForWebApi(identity)` 取票据（默认 identity 为 `feedback-api`）。
 
 ## Godot 客户端插件
 

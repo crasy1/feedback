@@ -1,22 +1,21 @@
 using System.Text.Json;
-using Microsoft.Extensions.Options;
 
 namespace GameFeedback.Services;
 
 /// <summary>
-/// 查询玩家在本游戏上的累计游玩时长（分钟），走 Steam Web API 的
+/// 查询玩家在某个 Game 上的累计游玩时长（分钟），走 Steam Web API 的
 /// <c>IPlayerService/GetSingleGamePlaytime/v1</c>。
 /// <para>
 /// 尽力而为：任何失败（超时、非 2xx、JSON 异常、字段缺失）都返回 <c>null</c> 并记 Warning，
 /// <b>绝不</b>抛给调用方——玩家不该因为查不到时长就丢掉自己写好的反馈。
 /// </para>
 /// <para>
-/// 不复用 <see cref="SteamAuthService"/>：那个类的职责是"验票 + 资料"。
+/// AppID 与凭据由调用方按请求解析出的 Game 传入（多游戏下二者都是逐游戏的），
+/// 本服务不读任何全局配置，也不复用 <see cref="SteamAuthService"/>：那个类的职责是"验票 + 资料"。
 /// </para>
 /// </summary>
 public class SteamPlaytimeService(
     IHttpClientFactory httpClientFactory,
-    IOptions<SteamOptions> steamOptions,
     ILogger<SteamPlaytimeService> logger)
 {
     private static readonly string GetSingleGamePlaytimePath = "/IPlayerService/GetSingleGamePlaytime/v1/";
@@ -33,15 +32,15 @@ public class SteamPlaytimeService(
     private HttpClient Client => httpClientFactory.CreateClient("Steam");
 
     /// <summary>
-    /// 返回该玩家在本 AppId 上的累计游玩时长（分钟）；取不到返回 <c>null</c>。
+    /// 返回该玩家在 <paramref name="appId"/> 上的累计游玩时长（分钟）；取不到返回 <c>null</c>。
     /// <paramref name="steamId"/> 必须来自认证主体，绝不要传入请求体里的值。
     /// </summary>
-    public async Task<int?> GetPlaytimeMinutesAsync(string steamId, CancellationToken cancellationToken)
+    public async Task<int?> GetPlaytimeMinutesAsync(
+        string steamId, string apiKey, string appId, CancellationToken cancellationToken)
     {
-        var steam = steamOptions.Value;
-        var url = $"{GetSingleGamePlaytimePath}?key={Uri.EscapeDataString(steam.ApiKey)}" +
+        var url = $"{GetSingleGamePlaytimePath}?key={Uri.EscapeDataString(apiKey)}" +
                   $"&steamid={Uri.EscapeDataString(steamId)}" +
-                  $"&appid={Uri.EscapeDataString(steam.AppId)}";
+                  $"&appid={Uri.EscapeDataString(appId)}";
 
         using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         budget.CancelAfter(LookupBudget);
@@ -62,7 +61,7 @@ public class SteamPlaytimeService(
                 ex,
                 "Steam GetSingleGamePlaytime 请求失败（SteamId={SteamId} AppId={AppId}），本条反馈的游玩时长记为 null",
                 steamId,
-                steam.AppId);
+                appId);
             return null;
         }
 
@@ -72,7 +71,7 @@ public class SteamPlaytimeService(
                 "Steam GetSingleGamePlaytime 返回 {StatusCode}（SteamId={SteamId} AppId={AppId}），本条反馈的游玩时长记为 null",
                 (int)response.StatusCode,
                 steamId,
-                steam.AppId);
+                appId);
             return null;
         }
 
@@ -116,7 +115,7 @@ public class SteamPlaytimeService(
             logger.LogWarning(
                 "Steam GetSingleGamePlaytime 响应不是有效 JSON（SteamId={SteamId} AppId={AppId}），本条反馈的游玩时长记为 null：{Payload}",
                 steamId,
-                steam.AppId,
+                appId,
                 Truncate(payload));
             return null;
         }
@@ -127,7 +126,7 @@ public class SteamPlaytimeService(
         logger.LogWarning(
             "Steam GetSingleGamePlaytime 响应里没有可用的 playtime_forever（SteamId={SteamId} AppId={AppId}），本条反馈的游玩时长记为 null：{Payload}",
             steamId,
-            steam.AppId,
+            appId,
             Truncate(payload));
         return null;
     }

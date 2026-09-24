@@ -29,3 +29,8 @@ Two facts constrain the design:
 - A Steam outage degrades one column, never the Feedback flow.
 - Hardware Info remains spoofable by design. It is length/range bounded, displayed as context, and no decision is automated on it.
 - The client-SDK limitation is the load-bearing reason for the server-side lookup: if a future host binding exposes total playtime for the app, this decision is worth revisiting.
+
+## Superseded in part by ADR-0007 and ADR-0008
+
+- The "configured Publisher Web API Key, the configured AppId" inputs to the playtime lookup are no longer deployment-wide scalars: the lookup uses the **resolved Game's** `SteamAppId` and its credential row instead. See [ADR-0007](0007-multi-game-support.md) and [ADR-0008](0008-steam-configuration-in-the-database.md).
+- Everything else in this ADR still governs unchanged: server-derived playtime, best effort under a 3-second budget, a per-Feedback snapshot, `null` on any failure, a submission that never fails because of it, and Hardware Info as bounded untrusted advisory context.

@@ -24,7 +24,11 @@ public sealed class OpenApiEndpointTests(IntegrationTestFixture fixture)
         Assert.Equal(HttpStatusCode.OK, doc.StatusCode);
 
         var body = await doc.Content.ReadFromJsonAsync<JsonElement>();
-        Assert.True(body.GetProperty("paths").TryGetProperty("/api/auth/steam", out _));
+        var paths = body.GetProperty("paths");
+        // 玩家 API 只存在于 /g/{appId} 之下（appId 是 Steam AppID），文档里也不该再出现根路径版本。
+        Assert.True(paths.TryGetProperty("/g/{appId}/api/auth/steam", out _));
+        Assert.False(paths.TryGetProperty("/api/auth/steam", out _));
+        Assert.False(paths.TryGetProperty("/api/feedback", out _));
         // 玩家 JWT 以 Bearer 方案呈现在文档中，供 Swagger UI 调试时授权。
         Assert.Equal("bearer", body.GetProperty("components")
             .GetProperty("securitySchemes")
@@ -45,15 +49,15 @@ public sealed class OpenApiEndpointTests(IntegrationTestFixture fixture)
             && debugProp.TryGetProperty("description", out _));
 
         // Try it out 的请求体预填取自媒体类型级 example（schema 级的 UI 不采用）。
-        var feedbackMedia = body.GetProperty("paths")
-            .GetProperty("/api/feedback")
+        var feedbackMedia = paths
+            .GetProperty("/g/{appId}/api/feedback")
             .GetProperty("post")
             .GetProperty("requestBody")
             .GetProperty("content")
             .GetProperty("application/json");
         Assert.Equal("Bug", feedbackMedia.GetProperty("example").GetProperty("type").GetString());
-        var commentMedia = body.GetProperty("paths")
-            .GetProperty("/api/feedback/{id}/comments")
+        var commentMedia = paths
+            .GetProperty("/g/{appId}/api/feedback/{id}/comments")
             .GetProperty("post")
             .GetProperty("requestBody")
             .GetProperty("content")
@@ -62,8 +66,8 @@ public sealed class OpenApiEndpointTests(IntegrationTestFixture fixture)
 
         // 受保护端点必须声明 Bearer 安全要求（不能是空对象 {}，
         // 否则 Swagger UI 视为允许匿名、不附带 Authorization 头）。
-        var mineSecurity = body.GetProperty("paths")
-            .GetProperty("/api/feedback/mine")
+        var mineSecurity = paths
+            .GetProperty("/g/{appId}/api/feedback/mine")
             .GetProperty("get")
             .GetProperty("security");
         Assert.True(mineSecurity[0].TryGetProperty("Bearer", out _));

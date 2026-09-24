@@ -4,19 +4,25 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GameFeedback.Services;
 
-/// <summary>玩家账号的创建与更新（按 SteamID upsert）。</summary>
+/// <summary>玩家账号的创建与更新（按 Game + SteamID upsert）。</summary>
 public class PlayerService(AppDbContext db)
 {
-    /// <summary>按 SteamID 查找或创建玩家，并刷新登录资料。一个 Steam 账号对应一个 Player。</summary>
-    public async Task<Player> UpsertFromSteamLoginAsync(string steamId, string? steamName, string? avatarUrl, CancellationToken cancellationToken)
+    /// <summary>
+    /// 在指定 Game 下按 SteamID 查找或创建玩家，并刷新登录资料。
+    /// 一个 Steam 账号在<b>每个 Game 下</b>各有一行 Player。
+    /// </summary>
+    public async Task<Player> UpsertFromSteamLoginAsync(
+        int gameId, string steamId, string? steamName, string? avatarUrl, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
-        var player = await db.Players.SingleOrDefaultAsync(p => p.SteamId == steamId, cancellationToken);
+        var player = await db.Players.SingleOrDefaultAsync(
+            p => p.GameId == gameId && p.SteamId == steamId, cancellationToken);
 
         if (player is null)
         {
             player = new Player
             {
+                GameId = gameId,
                 SteamId = steamId,
                 SteamName = steamName,
                 AvatarUrl = avatarUrl,

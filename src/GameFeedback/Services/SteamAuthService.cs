@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using Microsoft.Extensions.Options;
 
 namespace GameFeedback.Services;
 
@@ -30,8 +29,11 @@ public sealed record SteamTicketVerification(string? SteamId, SteamTicketFailure
 /// <summary>
 /// Steam 票据验证与资料获取。验证失败一律 fail closed（不给 SteamID、不签发令牌），
 /// 但会把失败分成"票被否"与"没验成"两类，让调用方与运维都能分辨。
+/// <para>
+/// AppID、票据 identity 与凭据都由调用方按请求解析出的 Game 传入——本服务不再读任何全局配置。
+/// </para>
 /// </summary>
-public class SteamAuthService(IHttpClientFactory httpClientFactory, IOptions<SteamOptions> steamOptions, ILogger<SteamAuthService> logger)
+public class SteamAuthService(IHttpClientFactory httpClientFactory, ILogger<SteamAuthService> logger)
 {
     /// <summary>SteamID64 的最小值（所有 SteamID64 由此开始）。</summary>
     private const ulong MinSteamId64 = 76561197960265728;
@@ -44,14 +46,18 @@ public class SteamAuthService(IHttpClientFactory httpClientFactory, IOptions<Ste
     /// <summary>
     /// 验证票据。成功给出受信任的 SteamID64；失败区分"Steam 说这张票不行"与"根本没验成"
     /// （网络/超时/HTTP 错误/响应不可解析）。两者对外都是 401，但可诊断性与可重试性完全不同。
+    /// <para>
+    /// 票据与 appid + identity 绑定：用另一个游戏的 AppID 去验必然被 Steam 否掉，
+    /// 这正是「请求属于哪个游戏」可以被证明、而不必信任客户端声明的原因。
+    /// </para>
     /// </summary>
-    public async Task<SteamTicketVerification> AuthenticateTicketAsync(string ticket, CancellationToken cancellationToken)
+    public async Task<SteamTicketVerification> AuthenticateTicketAsync(
+        string ticket, string apiKey, string appId, string identity, CancellationToken cancellationToken)
     {
-        var steam = steamOptions.Value;
-        var url = $"{AuthenticateUserTicketPath}?key={Uri.EscapeDataString(steam.ApiKey)}" +
-                  $"&appid={Uri.EscapeDataString(steam.AppId)}" +
+        var url = $"{AuthenticateUserTicketPath}?key={Uri.EscapeDataString(apiKey)}" +
+                  $"&appid={Uri.EscapeDataString(appId)}" +
                   $"&ticket={Uri.EscapeDataString(ticket)}" +
-                  $"&identity={Uri.EscapeDataString(steam.Identity)}";
+                  $"&identity={Uri.EscapeDataString(identity)}";
 
         HttpResponseMessage response;
         try
@@ -60,19 +66,19 @@ public class SteamAuthService(IHttpClientFactory httpClientFactory, IOptions<Ste
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            logger.LogWarning(ex, "Steam AuthenticateUserTicket 请求失败（appid={AppId}）", steam.AppId);
+            logger.LogWarning(ex, "Steam AuthenticateUserTicket 请求失败（appid={AppId}）", appId);
             return SteamTicketVerification.Unavailable();
         }
 
         if (!response.IsSuccessStatusCode)
         {
-            // 403/400 最常见的原因就是 Steam:ApiKey / Steam:AppId 是占位值或配错。
+            // 403/400 最常见的原因就是该游戏的 AppID 配错，或凭据无效/已被撤销。
             logger.LogWarning(
                 "Steam AuthenticateUserTicket 返回 {StatusCode}（appid={AppId} identity={Identity}；" +
-                "若为 403/400 请检查 Steam:ApiKey 与 Steam:AppId）",
+                "若为 403/400 请检查该游戏配置的 Steam AppID 与凭据）",
                 (int)response.StatusCode,
-                steam.AppId,
-                steam.Identity);
+                appId,
+                identity);
             return SteamTicketVerification.Unavailable();
         }
 
@@ -106,8 +112,8 @@ public class SteamAuthService(IHttpClientFactory httpClientFactory, IOptions<Ste
                     ReadStringIgnoreCase(document.RootElement, "response", "params", "result") ?? "(missing)",
                     ReadStringIgnoreCase(document.RootElement, "response", "params", "error", "errorcode") ?? "(none)",
                     ReadStringIgnoreCase(document.RootElement, "response", "params", "error", "errordesc") ?? "(none)",
-                    steam.AppId,
-                    steam.Identity);
+                    appId,
+                    identity);
                 return SteamTicketVerification.Rejected();
             }
 
@@ -117,8 +123,8 @@ public class SteamAuthService(IHttpClientFactory httpClientFactory, IOptions<Ste
             {
                 logger.LogWarning(
                     "Steam 票据验证响应缺少有效 SteamID64（appid={AppId} identity={Identity}）",
-                    steam.AppId,
-                    steam.Identity);
+                    appId,
+                    identity);
                 return SteamTicketVerification.Rejected();
             }
 
@@ -162,10 +168,10 @@ public class SteamAuthService(IHttpClientFactory httpClientFactory, IOptions<Ste
     }
 
     /// <summary>获取玩家资料；尽力而为，失败返回 (null, null) 且不影响登录。</summary>
-    public async Task<(string? SteamName, string? AvatarUrl)> GetPlayerSummaryAsync(string steamId, CancellationToken cancellationToken)
+    public async Task<(string? SteamName, string? AvatarUrl)> GetPlayerSummaryAsync(
+        string steamId, string apiKey, CancellationToken cancellationToken)
     {
-        var steam = steamOptions.Value;
-        var url = $"{GetPlayerSummariesPath}?key={Uri.EscapeDataString(steam.ApiKey)}&steamids={steamId}";
+        var url = $"{GetPlayerSummariesPath}?key={Uri.EscapeDataString(apiKey)}&steamids={steamId}";
 
         HttpResponseMessage response;
         try

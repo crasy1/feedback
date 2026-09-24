@@ -1,11 +1,15 @@
 # Game Feedback
 
-Server-side feedback system for a Steam game: players submit feedback authenticated through Steam; admins review, reply, and track status. This glossary defines the canonical terms used across code, specs, and ADRs.
+Server-side feedback system for Steam games: players submit feedback authenticated through Steam; admins review, reply, and track status. One instance serves several Games. This glossary defines the canonical terms used across code, specs, and ADRs.
 
 ## Language
 
+**Game**:
+One Steam application this instance serves feedback for, identified by its Steam AppID. Feedback, Players, Playtime, and administrative review are all scoped to exactly one Game. Being authenticated for one Game does not authenticate a Player for another.
+_Avoid_: App, application, product, project, tenant
+
 **Player**:
-A person authenticated through their Steam account. One Steam account maps to exactly one Player; no email or separate registration exists.
+A person authenticated through their Steam account, within one Game. One Steam account maps to exactly one Player per Game; no email or separate registration exists.
 _Avoid_: User, account, customer
 
 **Admin**:
@@ -13,7 +17,7 @@ A developer operator who signs in with a password (cookie session) to review fee
 _Avoid_: Moderator, staff, manager
 
 **Feedback**:
-A report or suggestion a Player submits about the game, with a type (Bug / Suggestion / Other) and a status.
+A report or suggestion a Player submits about one Game, with a type (Bug / Suggestion / Other) and a status.
 _Avoid_: Ticket, issue, post, report
 
 **Feedback Comment**:
@@ -25,7 +29,7 @@ Which side wrote a Feedback Comment: the owning Player or an Admin.
 _Avoid_: Role, poster
 
 **Playtime**:
-The time a Player has accumulated in the game, as reported by Steam and captured by the server at the moment a Feedback is submitted. A snapshot attached to one Feedback, not a live value; when Steam cannot supply it the value is left empty rather than estimated.
+The time a Player has accumulated in that Game, as reported by Steam and captured by the server at the moment a Feedback is submitted. A snapshot attached to one Feedback, not a live value; when Steam cannot supply it the value is left empty rather than estimated.
 _Avoid_: play hours, session time, 在线时长 (the length of a single game session is a different measurement)
 
 **Hardware Info**:
@@ -41,9 +45,9 @@ The server-issued token a Player's client includes on every API call after Steam
 _Avoid_: JWT (implementation detail), session token, API key
 
 **Ownership**:
-The invariant that a Player can only read and comment on their own Feedback, enforced by the server.
+The invariant that a Player can only read and comment on their own Feedback within the Game they authenticated for, enforced by the server.
 _Avoid_: Permission, visibility
 
 **Feedback Client**:
-The in-game Godot client that authenticates a Player and submits Feedback and Feedback Comments. It ships as an addon in this repository and is installed into a game project by copying it there.
+The in-game Godot client that authenticates a Player and submits Feedback and Feedback Comments. It ships as an addon in this repository and is installed into a game project by copying it there. It is pointed at the feedback service and supplies the Steam AppID it is running as, which is how it addresses that Game. The client never holds a Game identifier of its own invention.
 _Avoid_: SDK, client library, plugin wrapper

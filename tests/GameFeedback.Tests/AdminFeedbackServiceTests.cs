@@ -15,12 +15,15 @@ public sealed class AdminFeedbackServiceTests(IntegrationTestFixture fixture)
         FeedbackType type = FeedbackType.Bug,
         FeedbackStatus status = FeedbackStatus.Open,
         string? steamId = null,
-        string? steamName = "seeded")
+        string? steamName = "seeded",
+        TestGame? game = null)
     {
+        var target = game ?? fixture.DefaultGame;
         var scope = fixture.DefaultFactory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var player = new Player
         {
+            GameId = target.Id,
             SteamId = steamId ?? PlayerClient.UniqueSteamId(),
             SteamName = steamName,
             CreatedAt = DateTime.UtcNow,
@@ -32,6 +35,7 @@ public sealed class AdminFeedbackServiceTests(IntegrationTestFixture fixture)
         {
             last = new Feedback
             {
+                GameId = target.Id,
                 Player = player,
                 Type = type,
                 Title = $"反馈{i}",
@@ -194,7 +198,8 @@ public sealed class AdminFeedbackServiceTests(IntegrationTestFixture fixture)
     [Fact]
     public void Query_parameters_preserve_every_filter_when_paging()
     {
-        var query = new AdminFeedbackQuery(FeedbackStatus.InProgress, FeedbackType.Suggestion, "1.2.3", "76561198");
+        var query = new AdminFeedbackQuery(
+            FeedbackStatus.InProgress, FeedbackType.Suggestion, "1.2.3", "76561198", "480123");
 
         var parameters = query.ToQueryParameters(page: 3, pageSize: 20);
 
@@ -204,6 +209,8 @@ public sealed class AdminFeedbackServiceTests(IntegrationTestFixture fixture)
         Assert.Equal("Suggestion", parameters["type"]);
         Assert.Equal("1.2.3", parameters["gameVersion"]);
         Assert.Equal("76561198", parameters["player"]);
+        // 游戏筛选（值是 Steam AppID）也必须跟着翻页走，否则翻页会静默把范围放大到所有游戏。
+        Assert.Equal("480123", parameters["game"]);
     }
 
     [Fact]
@@ -215,6 +222,67 @@ public sealed class AdminFeedbackServiceTests(IntegrationTestFixture fixture)
         Assert.Null(parameters["type"]);
         Assert.Null(parameters["gameVersion"]);
         Assert.Null(parameters["player"]);
+        // null 游戏 = 全部游戏（管理端默认跨游戏浏览），不是"筛不到任何东西"。
+        Assert.Null(parameters["game"]);
+    }
+
+    /// <summary>按 Steam AppID 筛游戏：管理端在多游戏下最常用的收窄手段。</summary>
+    [Fact]
+    public async Task List_filters_by_game_app_id()
+    {
+        var gameA = await fixture.SeedGameAsync();
+        var gameB = await fixture.SeedGameAsync();
+        var version = $"v{Guid.NewGuid():N}"[..12];
+        await SeedPlayerWithFeedbacksAsync(2, gameVersion: version, game: gameA);
+        await SeedPlayerWithFeedbacksAsync(3, gameVersion: version, game: gameB);
+        var service = await CreateServiceAsync();
+
+        var (itemsA, totalA) = await service.ListAsync(
+            new AdminFeedbackQuery(GameVersion: version, Game: gameA.AppId), 1, 50, CancellationToken.None);
+        var (itemsB, totalB) = await service.ListAsync(
+            new AdminFeedbackQuery(GameVersion: version, Game: gameB.AppId), 1, 50, CancellationToken.None);
+        var (all, totalAll) = await service.ListAsync(
+            new AdminFeedbackQuery(GameVersion: version), 1, 50, CancellationToken.None);
+
+        Assert.Equal(2, totalA);
+        Assert.All(itemsA, f => Assert.Equal(gameA.Id, f.GameId));
+        Assert.Equal(3, totalB);
+        Assert.All(itemsB, f => Assert.Equal(gameB.Id, f.GameId));
+        Assert.Equal(5, totalAll);
+    }
+
+    /// <summary>
+    /// 筛一个不存在的 AppID 必须得到空结果，绝不能因为"这个游戏找不到"就静默放宽成全部游戏——
+    /// 那会让管理员以为自己在看某个游戏的反馈，其实看到的是所有游戏的。
+    /// </summary>
+    [Fact]
+    public async Task List_filters_by_an_unknown_game_app_id_returns_nothing()
+    {
+        var version = $"v{Guid.NewGuid():N}"[..12];
+        await SeedPlayerWithFeedbacksAsync(2, gameVersion: version);
+        var service = await CreateServiceAsync();
+
+        var (items, total) = await service.ListAsync(
+            new AdminFeedbackQuery(GameVersion: version, Game: TestGames.UniqueAppId()), 1, 50, CancellationToken.None);
+
+        Assert.Equal(0, total);
+        Assert.Empty(items);
+    }
+
+    /// <summary>详情必须带上游戏，管理端才能在跨游戏的列表里说清这条反馈属于哪个游戏。</summary>
+    [Fact]
+    public async Task Get_includes_the_game()
+    {
+        var game = await fixture.SeedGameAsync();
+        var (_, feedbackId) = await SeedPlayerWithFeedbacksAsync(1, game: game);
+        var service = await CreateServiceAsync();
+
+        var detail = await service.GetAsync(feedbackId, CancellationToken.None);
+
+        Assert.NotNull(detail);
+        Assert.NotNull(detail!.Game);
+        Assert.Equal(game.Id, detail.Game!.Id);
+        Assert.Equal(game.AppId, detail.Game.SteamAppId);
     }
 
     [Fact]

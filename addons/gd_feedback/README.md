@@ -1,4 +1,4 @@
-# GD Feedback 1.1.0
+# GD Feedback 1.3.0
 
 Steam 玩家反馈客户端（Godot 4.7 / .NET 10 插件）：玩家用 Steam 票据登录，提交反馈与评论，读取自己的反馈历史。
 它对接的是 [Steam Game Feedback System](../../README.md) 的玩家 API（契约见 [docs/specs/player-api.md](../../docs/specs/player-api.md)）。
@@ -54,6 +54,22 @@ public sealed class SteamTicketProvider : ITicketProvider
     }
 }
 ```
+
+还要把**当前游戏运行的 Steam AppID** 交给插件（同样是宿主的事，因为插件不引用 Steam）。
+给了它，插件就会自动把请求路径补成 `/g/{appId}/api/...`，于是 `BaseUrl` 只填服务地址，
+接入时**不需要手抄任何标识字符串**：
+
+```csharp
+using GdFeedback;
+
+/// <summary>把当前游戏运行的 Steam AppID 交给插件；本项目本来就在用它调 SteamClient.Init。</summary>
+public sealed class SteamAppIdProvider : IGameAppIdProvider
+{
+    public string? GetSteamAppId() => SteamClient.AppId.ToString(CultureInfo.InvariantCulture);
+}
+```
+
+不实现它也能用：那时插件原样使用 `BaseUrl`，你需要自己把 `/g/{appId}` 写进 `BaseUrl`。
 
 C# 调用：
 
@@ -142,8 +158,8 @@ func submit_and_wait() -> void:
 
 | 属性 | 默认 | 说明 |
 |---|---|---|
-| `BaseUrl` | `http://localhost:5087` | 反馈服务地址，必须是绝对的 http/https |
-| `Identity` | `feedback-api` | 票据 identity，**必须与服务端 `Steam:Identity` 一致** |
+| `BaseUrl` | `http://localhost:5087` | 反馈服务地址，必须是绝对的 http/https。**只填服务地址**：`/g/{appId}` 前缀由宿主的 `IGameAppIdProvider` 自动补全 |
+| `Identity` | `feedback-api` | 票据 identity，**必须与后台里该游戏配置的票据 identity 一致**（默认就是 `feedback-api`） |
 | `RequestTimeoutSeconds` | `15` | 单请求超时 |
 | `AllowDebugLogin` | `false` | 调试登录开关；服务端对应开关只在 Development 生效 |
 | `DebugSteamId` | 空 | 调试登录声明的 SteamID64（17 位数字） |
@@ -171,7 +187,8 @@ Task<FeedbackResult<IReadOnlyList<PlayerFeedback>>> ListMineAsync()
 Task<FeedbackResult<PlayerFeedbackDetail>>  GetDetailAsync(int feedbackId)
 Task<FeedbackResult<PlayerFeedbackComment>> AddCommentAsync(int feedbackId, string content)
 Task                                        ClearSessionAsync()
-void                                        Configure(FeedbackConfig config = null, ITicketProvider ticketProvider = null)
+void                                        Configure(FeedbackConfig config = null, ITicketProvider ticketProvider = null,
+                                                      IGameAppIdProvider gameAppIdProvider = null)
 ```
 
 信号（全部在主线程发出）：
@@ -203,7 +220,9 @@ void                                        Configure(FeedbackConfig config = nu
 | `ticket_invalid` | 票据为空、长得不像票据（>16384 字符），或被服务端判为无效 | 否 |
 | `invalid_steam_id` | 调试登录声明的 SteamID64 形状非法 | 否 |
 | `steam_verification_rejected` | 服务端 401 且 Steam 明确否决了这张票（无效/过期/appid·identity 不匹配） | 否 |
-| `steam_verification_unavailable` | 服务端 401 但**没能验成**（网络、超时，或服务端 `Steam:ApiKey`/`Steam:AppId` 没配好）；与票据本身无关 | 是 |
+| `steam_verification_unavailable` | 服务端 401 但**没能验成**（网络、超时，或该游戏在后台还没配好 Steam 凭据）；与票据本身无关 | 是 |
+| `game_not_found` | 登录端点 404：反馈服务上没有这个 AppID 的游戏（该游戏还没在后台建出来，或两边 AppID 不一致）。**配置问题**，与票据无关 | 否 |
+| `game_disabled` | 登录端点 403：这个游戏已被管理员停用。**配置问题**，与票据无关 | 否 |
 | `unauthorized` | 非登录端点的 401（重登一次后仍失败） | 否 |
 | `not_found` | 反馈不存在或不属于当前玩家（服务端对两者一律 404） | 否 |
 | `rate_limited` | 429：命中服务端限流 | 是 |
@@ -262,8 +281,11 @@ python addons/gd_feedback/tools/package.py --verify-only      # 只校验身份�
 
 1. 复制（或解压归档）`addons/gd_feedback/` 到目标项目的 `addons/` 下。
 2. `dotnet build`，然后在 Project Settings → Plugins 启用。
-3. 在目标项目根建 `feedback_config.tres`（`FeedbackConfig` 资源），填生产 `BaseUrl`。
+3. 在目标项目根建 `feedback_config.tres`（`FeedbackConfig` 资源），填生产 `BaseUrl`（只填服务地址）。
 4. 在宿主里实现 `ITicketProvider`（Steam 出票）并赋给 `FeedbackClient.TicketProvider`。
+5. 在宿主里实现 `IGameAppIdProvider`（返回当前游戏运行的 Steam AppID）并赋给
+   `FeedbackClient.GameAppIdProvider`——玩家 API 的 `/g/{appId}` 前缀由插件自动补全，
+   接入方不必手抄标识字符串。宿主本来就在用同一个值调 `SteamClient.Init`。
 
 本插件的权威定义在服务端仓库：`CONTEXT.md`（术语）、`docs/adr/0004-godot-feedback-client-addon.md`（决定与取舍）。
 
@@ -281,4 +303,7 @@ _Avoid_: JWT、session、API key
 ```
 
 该仓库还需要自行完成（本插件不代劳）：启用插件、把 `GdFeedback` Autoload 指向宿主的票据提供者、
-在 `project.godot` 里确认 `Steam` 使用**正式 AppId**（不是 480 测试 App），并为新增的场景更新该仓库的场景目录文档。
+把 `FeedbackConfig.BaseUrl` 指向 `https://<反馈服务域名>`（**不要**带 `/g/...`，那段由
+`IGameAppIdProvider` 交出的 AppID 自动补全）、
+在 `project.godot` 里确认 `Steam` 使用**正式 AppId**（不是 480 测试 App，且要与后台里该游戏配置的 Steam AppID 一致），
+并为新增的场景更新该仓库的场景目录文档。

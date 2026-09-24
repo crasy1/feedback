@@ -50,6 +50,9 @@ namespace GameFeedback.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("GameId")
+                        .HasColumnType("integer");
+
                     b.Property<string>("GameVersion")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -101,11 +104,15 @@ namespace GameFeedback.Data.Migrations
 
                     b.HasIndex("CreatedAt");
 
-                    b.HasIndex("GameVersion");
-
                     b.HasIndex("PlayerId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("GameId", "CreatedAt");
+
+                    b.HasIndex("GameId", "GameVersion");
+
+                    b.HasIndex("GameId", "Status");
 
                     b.ToTable("feedbacks", (string)null);
                 });
@@ -151,6 +158,55 @@ namespace GameFeedback.Data.Migrations
                     b.ToTable("feedback_comments", (string)null);
                 });
 
+            modelBuilder.Entity("GameFeedback.Domain.Game", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CredentialId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Identity")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasDefaultValue("feedback-api")
+                        .HasColumnName("steam_identity");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SteamAppId")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CredentialId");
+
+                    b.HasIndex("SteamAppId")
+                        .IsUnique();
+
+                    b.ToTable("games", (string)null);
+                });
+
             modelBuilder.Entity("GameFeedback.Domain.Player", b =>
                 {
                     b.Property<int>("Id")
@@ -165,6 +221,9 @@ namespace GameFeedback.Data.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("GameId")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
@@ -183,10 +242,38 @@ namespace GameFeedback.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("SteamId")
+                    b.HasIndex("GameId", "SteamId")
                         .IsUnique();
 
                     b.ToTable("players", (string)null);
+                });
+
+            modelBuilder.Entity("GameFeedback.Domain.SteamCredential", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EncryptedApiKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("steam_credentials", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -387,11 +474,19 @@ namespace GameFeedback.Data.Migrations
 
             modelBuilder.Entity("GameFeedback.Domain.Feedback", b =>
                 {
+                    b.HasOne("GameFeedback.Domain.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("GameFeedback.Domain.Player", "Player")
                         .WithMany()
                         .HasForeignKey("PlayerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Game");
 
                     b.Navigation("Player");
                 });
@@ -405,6 +500,27 @@ namespace GameFeedback.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Feedback");
+                });
+
+            modelBuilder.Entity("GameFeedback.Domain.Game", b =>
+                {
+                    b.HasOne("GameFeedback.Domain.SteamCredential", "Credential")
+                        .WithMany()
+                        .HasForeignKey("CredentialId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Credential");
+                });
+
+            modelBuilder.Entity("GameFeedback.Domain.Player", b =>
+                {
+                    b.HasOne("GameFeedback.Domain.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Game");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

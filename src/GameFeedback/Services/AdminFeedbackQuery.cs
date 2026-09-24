@@ -23,7 +23,8 @@ public sealed record AdminFeedbackQuery(
     FeedbackStatus? Status = null,
     FeedbackType? Type = null,
     string? GameVersion = null,
-    string? Player = null)
+    string? Player = null,
+    string? Game = null)
 {
     /// <summary>
     /// 构造 <c>NavigationManager.GetUriWithQueryParameters</c> 用的参数字典。
@@ -37,5 +38,7 @@ public sealed record AdminFeedbackQuery(
         ["type"] = Type?.ToString(),
         ["gameVersion"] = GameVersion,
         ["player"] = Player,
+        // 按 Steam AppID 过滤（与玩家 API 的路径段是同一个标识）；null = 全部游戏（管理端默认可跨游戏浏览）。
+        ["game"] = Game,
     };
 }
