@@ -6,6 +6,7 @@
 @attribute [Authorize]
 @inject AdminFeedbackService AdminFeedbacks
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>反馈列表 - 游戏反馈系统</PageTitle>
 
@@ -35,52 +36,95 @@
         游戏版本
         <input @bind="GameVersionFilter" placeholder="如 1.2.3" />
     </label>
-    <button @onclick="ApplyFilters">筛选</button>
+    <label>
+        玩家
+        <input @bind="PlayerFilter" placeholder="SteamID64 或昵称" />
+    </label>
+    <div class="filter-actions">
+        <button class="primary" @onclick="ApplyFilters">筛选</button>
+    </div>
 </div>
+
+@if (_actionError is not null)
+{
+    <p class="error">@_actionError</p>
+}
+
+@if (_clipboardMessage is not null)
+{
+    <p class="note">@_clipboardMessage</p>
+}
 
 @if (_items is null)
 {
-    <p>加载中…</p>
+    <p class="state">加载中…</p>
 }
 else if (_items.Count == 0)
 {
-    <p>暂无反馈。</p>
+    <p class="state">暂无反馈。</p>
 }
 else
 {
-    <table class="feedback-table">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>类型</th>
-                <th>标题</th>
-                <th>玩家</th>
-                <th>状态</th>
-                <th>游戏版本</th>
-                <th>创建时间 (UTC)</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var feedback in _items)
-            {
+    <div class="table-scroll">
+        <table class="feedback-table">
+            <thead>
                 <tr>
-                    <td>@feedback.Id</td>
-                    <td>@feedback.Type</td>
-                    <td><a href="/admin/feedback/@feedback.Id">@feedback.Title</a></td>
-                    <td>
-                        @if (!string.IsNullOrWhiteSpace(feedback.Player?.AvatarUrl))
-                        {
-                            <img class="player-avatar" src="@feedback.Player.AvatarUrl" alt="玩家头像" width="32" height="32" loading="lazy" />
-                        }
-                        @(feedback.Player?.SteamName ?? "未知")
-                    </td>
-                    <td>@FeedbackStatusDisplay.GetText(feedback.Status)</td>
-                    <td>@feedback.GameVersion</td>
-                    <td>@feedback.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    <th>ID</th>
+                    <th>类型</th>
+                    <th>标题</th>
+                    <th>玩家</th>
+                    <th>状态</th>
+                    <th>游戏版本</th>
+                    <th>游玩时长</th>
+                    <th>创建时间 (UTC)</th>
                 </tr>
-            }
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                @foreach (var feedback in _items)
+                {
+                    <tr>
+                        <td>@feedback.Id</td>
+                        <td><span class="badge @FeedbackTypeDisplay.GetCssClass(feedback.Type)">@feedback.Type</span></td>
+                        <td class="title-cell"><a href="/admin/feedback/@feedback.Id">@feedback.Title</a></td>
+                        <td>
+                            <div class="player-cell">
+                                @if (!string.IsNullOrWhiteSpace(feedback.Player?.AvatarUrl))
+                                {
+                                    <img class="player-avatar" src="@feedback.Player.AvatarUrl" alt="玩家头像" width="28" height="28" loading="lazy" />
+                                }
+                                <span>
+                                    @(feedback.Player?.SteamName ?? "未知")
+                                    @if (!string.IsNullOrWhiteSpace(feedback.Player?.SteamId))
+                                    {
+                                        <span class="player-id">@feedback.Player.SteamId</span>
+                                    }
+                                </span>
+                                @if (!string.IsNullOrWhiteSpace(feedback.Player?.SteamId))
+                                {
+                                    <button type="button" title="复制 SteamID64"
+                                            @onclick="() => CopySteamIdAsync(feedback.Player!.SteamId)">复制</button>
+                                }
+                            </div>
+                        </td>
+                        <td>
+                            @* 状态用带颜色的下拉框：既是状态指示，也是行内改状态的入口。 *@
+                            <select class="badge status-select @FeedbackStatusDisplay.GetCssClass(feedback.Status)"
+                                    value="@feedback.Status"
+                                    @onchange="args => ChangeStatusAsync(feedback.Id, args)">
+                                @foreach (var status in Enum.GetValues<FeedbackStatus>())
+                                {
+                                    <option value="@status">@FeedbackStatusDisplay.GetText(status)</option>
+                                }
+                            </select>
+                        </td>
+                        <td>@feedback.GameVersion</td>
+                        <td>@FormatPlaytime(feedback.PlaytimeMinutes)</td>
+                        <td>@feedback.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
 
     <div class="pager">
         <span>共 @_total 条 · 第 @Page / @TotalPages 页</span>
@@ -111,6 +155,9 @@ else
     [SupplyParameterFromQuery(Name = "gameVersion")]
     public string? GameVersion { get; set; }
 
+    [SupplyParameterFromQuery(Name = "player")]
+    public string? Player { get; set; }
+
     private string StatusFilter
     {
         get => Status ?? string.Empty;
@@ -129,55 +176,94 @@ else
         set => GameVersion = string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
+    private string PlayerFilter
+    {
+        get => Player ?? string.Empty;
+        set => Player = string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
     private IReadOnlyList<Domain.Feedback>? _items;
     private int _total;
+    private string? _actionError;
+    private string? _clipboardMessage;
 
     private int TotalPages => Math.Max(1, (int)Math.Ceiling(_total / (double)PageSize));
+
+    /// <summary>URL 里的筛选值解析成强类型；非法值静默降级为"不过滤"。</summary>
+    private AdminFeedbackQuery CurrentQuery => new(
+        Enum.TryParse<FeedbackStatus>(Status, ignoreCase: true, out var status) ? status : null,
+        Enum.TryParse<FeedbackType>(Type, ignoreCase: true, out var type) ? type : null,
+        GameVersion,
+        Player);
 
     protected override async Task OnParametersSetAsync()
     {
         Page = Math.Max(1, Page);
         PageSize = Math.Clamp(PageSize <= 0 ? AdminFeedbackService.DefaultPageSize : PageSize, 1, AdminFeedbackService.MaxPageSize);
-        var status = Enum.TryParse<FeedbackStatus>(Status, ignoreCase: true, out var s) ? s : (FeedbackStatus?)null;
-        var type = Enum.TryParse<FeedbackType>(Type, ignoreCase: true, out var t) ? t : (FeedbackType?)null;
+        await ReloadAsync();
+    }
 
-        var (items, total) = await AdminFeedbacks.ListAsync(status, type, GameVersion, Page, PageSize, CancellationToken.None);
+    private async Task ReloadAsync()
+    {
+        var (items, total) = await AdminFeedbacks.ListAsync(CurrentQuery, Page, PageSize, CancellationToken.None);
         _items = items;
         _total = total;
     }
 
-    private void ApplyFilters()
+    /// <summary>
+    /// 唯一的查询串出口：筛选与翻页都走它。
+    /// 之前 GoToPage 自己拼参数、漏掉全部筛选条件，翻页会静默把查询范围放大——收敛到一处后不可能再分歧。
+    /// </summary>
+    private string BuildUrl(int page) => Navigation.GetUriWithQueryParameters(
+        CurrentQuery.ToQueryParameters(page, PageSize));
+
+    private void ApplyFilters() => Navigation.NavigateTo(BuildUrl(1));
+
+    private void GoToPage(int page) => Navigation.NavigateTo(BuildUrl(page));
+
+    private async Task ChangeStatusAsync(int feedbackId, ChangeEventArgs args)
     {
-        var url = Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+        if (!Enum.TryParse<FeedbackStatus>(args.Value?.ToString(), ignoreCase: true, out var status))
         {
-            ["page"] = 1,
-            ["pageSize"] = PageSize,
-            ["status"] = Status,
-            ["type"] = Type,
-            ["gameVersion"] = GameVersion,
-        });
-        Navigation.NavigateTo(url);
+            return;
+        }
+
+        _actionError = null;
+        var changed = await AdminFeedbacks.ChangeStatusAsync(feedbackId, status, CancellationToken.None);
+        if (!changed)
+        {
+            _actionError = $"反馈 #{feedbackId} 不存在，状态未更改。";
+            return;
+        }
+
+        // 重跑当前查询而不是只改本地那一行：状态筛选生效时，这一行本来就该从列表里消失/出现。
+        await ReloadAsync();
     }
 
-    private void GoToPage(int page)
+    private async Task CopySteamIdAsync(string steamId)
     {
-        var url = Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+        try
         {
-            ["page"] = page,
-            ["pageSize"] = PageSize,
-        });
-        Navigation.NavigateTo(url);
+            // navigator.clipboard 只在安全上下文可用；admin.js 返回 false 表示必须回退到手动复制。
+            var copied = await JS.InvokeAsync<bool>("adminInterop.copyText", steamId);
+            _clipboardMessage = copied
+                ? $"已复制 SteamID64：{steamId}"
+                : $"浏览器不允许自动复制，请手动选择表格里的 SteamID64：{steamId}";
+        }
+        catch (JSException)
+        {
+            _clipboardMessage = $"浏览器不允许自动复制，请手动选择表格里的 SteamID64：{steamId}";
+        }
+    }
+
+    /// <summary>游玩时长以分钟入库（Steam 原生单位），展示时换算。</summary>
+    private static string FormatPlaytime(int? minutes)
+    {
+        if (minutes is not int value)
+        {
+            return "—";
+        }
+
+        return value < 60 ? $"{value} 分钟" : $"{value / 60.0:0.#} 小时";
     }
 }
-
-<style>
-    .filters { display: flex; gap: 1rem; align-items: end; margin: 1rem 0; }
-    .filters label { display: flex; flex-direction: column; font-size: .85rem; color: #374151; gap: .25rem; }
-    .feedback-table { width: 100%; border-collapse: collapse; background: #fff; }
-    .feedback-table th, .feedback-table td { border: 1px solid #e5e7eb; padding: .5rem .75rem; text-align: left; font-size: .875rem; }
-    .feedback-table thead { background: #f3f4f6; }
-    .player-avatar { object-fit: cover; border-radius: 4px; vertical-align: middle; margin-right: .5rem; }
-    .pager { display: flex; gap: 1rem; align-items: center; margin-top: 1rem; }
-    button { padding: .35rem .8rem; border: 1px solid #d1d5db; background: #fff; border-radius: 4px; cursor: pointer; }
-    button:hover { background: #f3f4f6; }
-</style>

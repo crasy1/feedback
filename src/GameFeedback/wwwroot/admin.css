@@ -1,0 +1,448 @@
+/*
+ * 管理端共享样式。
+ *
+ * 引入位置：Components/App.razor（Blazor 管理页）与 Pages/Admin/Login.cshtml（登录页是独立 HTML）。
+ * 所有规则都限定在 .admin-root / .admin-login 之下，避免影响仓库里其它页面（例如模板首页）。
+ * 不引入任何 CSS 框架：本项目管理端只有三个页面，手写 CSS 足够，且能保持离线/内网部署可用。
+ */
+
+:root {
+    --admin-bg: #f6f7f9;
+    --admin-surface: #ffffff;
+    --admin-border: #e3e6ea;
+    --admin-text: #1f2937;
+    --admin-muted: #6b7280;
+    --admin-accent: #2563eb;
+    --admin-header-bg: #1e293b;
+}
+
+/* ---------- 外壳与导航 ---------- */
+
+.admin-root {
+    min-height: 100vh;
+    background: var(--admin-bg);
+    color: var(--admin-text);
+    font-family: "Segoe UI", system-ui, -apple-system, "Microsoft YaHei", sans-serif;
+}
+
+.admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: .75rem 1.5rem;
+    background: var(--admin-header-bg);
+    color: #f1f5f9;
+}
+
+.admin-header .admin-title {
+    font-weight: 600;
+    letter-spacing: .02em;
+}
+
+.admin-header nav a {
+    color: #cbd5e1;
+    margin-left: 1.25rem;
+    text-decoration: none;
+    font-size: .9rem;
+}
+
+.admin-header nav a:hover {
+    color: #fff;
+}
+
+.admin-main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1.5rem;
+}
+
+/* ---------- 标题与分区 ---------- */
+
+.admin-root h1 {
+    font-size: 1.35rem;
+    margin: 0 0 1rem;
+}
+
+.admin-root h2 {
+    font-size: 1.05rem;
+    margin: 1.5rem 0 .5rem;
+}
+
+.admin-root section {
+    margin-bottom: 1.25rem;
+}
+
+/* ---------- 状态 / 类型徽章 ---------- */
+
+.badge {
+    display: inline-block;
+    padding: .15rem .5rem;
+    border-radius: 999px;
+    font-size: .78rem;
+    line-height: 1.5;
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+
+.badge-open { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+.badge-progress { background: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+.badge-resolved { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.badge-closed { background: #e5e7eb; color: #374151; border-color: #d1d5db; }
+
+.badge-bug { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+.badge-suggestion { background: #e0e7ff; color: #3730a3; border-color: #c7d2fe; }
+.badge-other { background: #e5e7eb; color: #374151; border-color: #d1d5db; }
+
+/* ---------- 筛选条（吸顶，滚动时始终可改条件） ---------- */
+
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: end;
+    margin: 0 0 1rem;
+    padding: .85rem 1rem;
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.filters label {
+    display: flex;
+    flex-direction: column;
+    font-size: .85rem;
+    color: var(--admin-muted);
+    gap: .25rem;
+}
+
+.filters .filter-actions {
+    display: flex;
+    gap: .5rem;
+}
+
+/* ---------- 表单控件（限定在管理端容器内） ---------- */
+
+.admin-root input,
+.admin-root select,
+.admin-root textarea,
+.admin-login input {
+    padding: .4rem .55rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: .875rem;
+    font-family: inherit;
+    color: inherit;
+    background: #fff;
+}
+
+.admin-root input:focus,
+.admin-root select:focus,
+.admin-root textarea:focus,
+.admin-login input:focus {
+    outline: 2px solid #bfdbfe;
+    outline-offset: 0;
+    border-color: var(--admin-accent);
+}
+
+.admin-root textarea {
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+}
+
+/* ---------- 按钮 ---------- */
+
+.admin-root button,
+.admin-login button {
+    padding: .4rem .85rem;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    border-radius: 6px;
+    font-size: .875rem;
+    font-family: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+
+.admin-root button:hover:not(:disabled),
+.admin-login button:hover:not(:disabled) {
+    background: #f3f4f6;
+}
+
+.admin-root button:disabled {
+    opacity: .55;
+    cursor: default;
+}
+
+.admin-root button.primary,
+.admin-login button.primary {
+    background: var(--admin-accent);
+    border-color: var(--admin-accent);
+    color: #fff;
+}
+
+.admin-root button.primary:hover:not(:disabled),
+.admin-login button.primary:hover:not(:disabled) {
+    background: #1d4ed8;
+}
+
+/* ---------- 表格 ---------- */
+
+/* 窄屏横向滚动：表格有最小宽度，不靠 JS 也不把列挤变形。 */
+.table-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    background: var(--admin-surface);
+}
+
+.feedback-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 860px;
+}
+
+.feedback-table th,
+.feedback-table td {
+    padding: .55rem .75rem;
+    text-align: left;
+    font-size: .875rem;
+    border-bottom: 1px solid var(--admin-border);
+    vertical-align: middle;
+}
+
+.feedback-table thead th {
+    background: #f8fafc;
+    color: var(--admin-muted);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.feedback-table tbody tr:nth-child(even) {
+    background: #fcfcfd;
+}
+
+.feedback-table tbody tr:hover {
+    background: #f1f5f9;
+}
+
+.feedback-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.feedback-table td.title-cell a {
+    color: var(--admin-accent);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.feedback-table td.title-cell a:hover {
+    text-decoration: underline;
+}
+
+.feedback-table td.actions-cell {
+    white-space: nowrap;
+}
+
+.feedback-table select.status-select {
+    padding: .2rem 1.5rem .2rem .5rem;
+    font-size: .8rem;
+    border-radius: 6px;
+}
+
+/* ---------- 玩家单元 ---------- */
+
+.player-cell {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.player-avatar {
+    object-fit: cover;
+    border-radius: 4px;
+    flex: none;
+}
+
+.player-cell .player-id {
+    color: var(--admin-muted);
+    font-size: .78rem;
+}
+
+/* ---------- 分页 ---------- */
+
+.pager {
+    display: flex;
+    gap: .75rem;
+    align-items: center;
+    margin-top: 1rem;
+    color: var(--admin-muted);
+    font-size: .875rem;
+}
+
+/* ---------- 加载态 / 空态 ---------- */
+
+.state {
+    padding: 2rem 1rem;
+    text-align: center;
+    color: var(--admin-muted);
+    background: var(--admin-surface);
+    border: 1px dashed var(--admin-border);
+    border-radius: 8px;
+}
+
+/* ---------- 详情页 ---------- */
+
+.meta {
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    padding: .85rem 1rem;
+}
+
+.meta dl {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: .35rem 1rem;
+    margin: 0;
+    font-size: .9rem;
+}
+
+.meta dt {
+    color: var(--admin-muted);
+}
+
+.meta dd {
+    margin: 0;
+    word-break: break-word;
+}
+
+.content pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
+    padding: 1rem;
+    border-radius: 8px;
+    font-family: inherit;
+    margin: 0;
+}
+
+.comment {
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    padding: .75rem 1rem;
+    margin: .5rem 0;
+}
+
+.comment .author {
+    font-weight: 600;
+    margin-right: .75rem;
+}
+
+.comment .time {
+    color: var(--admin-muted);
+    font-size: .8rem;
+}
+
+.comment p {
+    margin: .4rem 0 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.actions {
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    padding: .85rem 1rem;
+}
+
+.actions button {
+    margin-top: .5rem;
+    margin-right: .75rem;
+}
+
+.error {
+    color: #dc2626;
+    font-size: .875rem;
+}
+
+/* 一般性提示（例如"已复制 SteamID64"） */
+.note {
+    color: var(--admin-muted);
+    font-size: .85rem;
+}
+
+/* ---------- 登录页（独立 HTML，body 上挂 .admin-login） ---------- */
+
+body.admin-login {
+    font-family: "Segoe UI", system-ui, -apple-system, "Microsoft YaHei", sans-serif;
+    background: #f3f4f6;
+    color: var(--admin-text);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+}
+
+body.admin-login .card {
+    background: #fff;
+    padding: 2rem 2.5rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, .08);
+    width: 320px;
+}
+
+body.admin-login h1 {
+    font-size: 1.2rem;
+    margin: 0 0 1.25rem;
+}
+
+body.admin-login label {
+    display: block;
+    margin: .75rem 0 .25rem;
+    font-size: .85rem;
+    color: var(--admin-muted);
+}
+
+body.admin-login input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: .5rem;
+}
+
+body.admin-login button {
+    margin-top: 1.25rem;
+    width: 100%;
+    padding: .6rem;
+}
+
+body.admin-login .error {
+    margin-top: .75rem;
+}
+
+/* ---------- 窄屏 ---------- */
+
+@media (max-width: 720px) {
+    .admin-main {
+        padding: 1rem;
+    }
+
+    .filters {
+        position: static;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .filters label {
+        width: 100%;
+    }
+}
