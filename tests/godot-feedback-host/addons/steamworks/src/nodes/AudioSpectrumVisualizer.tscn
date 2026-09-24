@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://decc5the6cq5f"]
+
+[ext_resource type="Script" uid="uid://ki8bjfmn6wl4" path="res://addons/steamworks/src/nodes/AudioSpectrumVisualizer.cs" id="1_3u70g"]
+
+[node name="AudioSpectrumVisualizer" type="Node2D"]
+script = ExtResource("1_3u70g")

@@ -1,0 +1,168 @@
+[gd_scene format=3 uid="uid://5d16l3scxach"]
+
+[ext_resource type="Script" uid="uid://wva8gx0n7kib" path="res://addons/steamworks/src/SteamworksEditor.cs" id="1_mcy6p"]
+
+[node name="SteamworksEditor" type="Control" unique_id=820910685]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_mcy6p")
+
+[node name="FlowContainer" type="FlowContainer" parent="." unique_id=2051198967]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/h_separation = 20
+theme_override_constants/v_separation = 20
+
+[node name="Steam" type="FlowContainer" parent="FlowContainer" unique_id=2069482981]
+layout_mode = 2
+
+[node name="AppIdSpinBox" type="SpinBox" parent="FlowContainer/Steam" unique_id=499482152]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 10000000.0
+value = 480.0
+rounded = true
+allow_greater = true
+alignment = 3
+prefix = "AppId:"
+
+[node name="SetEnvButton" type="Button" parent="FlowContainer/Steam" unique_id=1407390513]
+unique_name_in_owner = true
+layout_mode = 2
+text = "设置steamworks环境"
+
+[node name="UserDataButton" type="Button" parent="FlowContainer/Steam" unique_id=15722914]
+unique_name_in_owner = true
+layout_mode = 2
+text = "打开\"user_data\"文件夹"
+
+[node name="DebugUI" type="CheckButton" parent="FlowContainer/Steam" unique_id=1739535717]
+unique_name_in_owner = true
+layout_mode = 2
+text = "启动游戏时显示调试界面"
+
+[node name="AsServer" type="CheckButton" parent="FlowContainer/Steam" unique_id=2098861931]
+unique_name_in_owner = true
+layout_mode = 2
+text = "作为steam服务器"
+
+[node name="HBoxContainer" type="HBoxContainer" parent="FlowContainer/Steam" unique_id=178292357]
+layout_mode = 2
+size_flags_horizontal = 0
+
+[node name="Label" type="Label" parent="FlowContainer/Steam/HBoxContainer" unique_id=1360175332]
+layout_mode = 2
+size_flags_horizontal = 4
+text = "录音采样率："
+
+[node name="SampleRate" type="OptionButton" parent="FlowContainer/Steam/HBoxContainer" unique_id=2027972680]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+selected = 4
+item_count = 6
+popup/item_0/text = "11025"
+popup/item_0/id = 0
+popup/item_1/text = "22050"
+popup/item_1/id = 1
+popup/item_2/text = "24000"
+popup/item_2/id = 2
+popup/item_3/text = "32000"
+popup/item_3/id = 3
+popup/item_4/text = "44100"
+popup/item_4/id = 4
+popup/item_5/text = "48000"
+popup/item_5/id = 5
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="FlowContainer/Steam" unique_id=1561884423]
+layout_mode = 2
+size_flags_horizontal = 0
+
+[node name="Label" type="Label" parent="FlowContainer/Steam/HBoxContainer2" unique_id=644454979]
+layout_mode = 2
+size_flags_horizontal = 4
+text = "文件日志等级："
+
+[node name="FileLogLevel" type="OptionButton" parent="FlowContainer/Steam/HBoxContainer2" unique_id=1193124388]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+selected = 2
+item_count = 5
+popup/item_0/text = "VERBOSE"
+popup/item_0/id = 0
+popup/item_1/text = "DEBUG"
+popup/item_1/id = 1
+popup/item_2/text = "INFO"
+popup/item_2/id = 2
+popup/item_3/text = "WARN"
+popup/item_3/id = 3
+popup/item_4/text = "ERROR"
+popup/item_4/id = 4
+
+[node name="HBoxContainer3" type="HBoxContainer" parent="FlowContainer/Steam" unique_id=1238309040]
+layout_mode = 2
+size_flags_horizontal = 0
+
+[node name="Label" type="Label" parent="FlowContainer/Steam/HBoxContainer3" unique_id=2126177000]
+layout_mode = 2
+size_flags_horizontal = 4
+text = "打印日志等级："
+
+[node name="GdLogLevel" type="OptionButton" parent="FlowContainer/Steam/HBoxContainer3" unique_id=981861784]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+selected = 1
+item_count = 5
+popup/item_0/text = "VERBOSE"
+popup/item_0/id = 0
+popup/item_1/text = "DEBUG"
+popup/item_1/id = 1
+popup/item_2/text = "INFO"
+popup/item_2/id = 2
+popup/item_3/text = "WARN"
+popup/item_3/id = 3
+popup/item_4/text = "ERROR"
+popup/item_4/id = 4
+
+[node name="Label" type="Label" parent="FlowContainer/Steam" unique_id=1294638528]
+layout_mode = 2
+text = "自定义音频总线："
+
+[node name="TextEdit" type="TextEdit" parent="FlowContainer/Steam" unique_id=16545506]
+custom_minimum_size = Vector2(220, 100)
+layout_mode = 2
+text = "res://addons/steamworks/src/resources/custom_bus_layout.tres"
+editable = false
+wrap_mode = 1
+scroll_vertical = 0.5925925925925926
+
+[node name="CustomBusLayout" type="CheckButton" parent="FlowContainer/Steam" unique_id=1059058928]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "使用自定义音频总线"
+
+[node name="Project" type="FlowContainer" parent="FlowContainer" unique_id=1764992386]
+layout_mode = 2
+
+[node name="SplashButton" type="CheckButton" parent="FlowContainer/Project" unique_id=185544995]
+unique_name_in_owner = true
+layout_mode = 2
+text = "启用透明开屏splash screen
+(开启时会使用默认配置，启动后复原存储的配置)"

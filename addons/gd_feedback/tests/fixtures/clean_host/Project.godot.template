@@ -1,0 +1,12 @@
+; 由 tests/verify.ps1 展开的临时 Godot 项目，仅用于运行引擎内探针。
+config_version=5
+
+[application]
+
+config/name="GdFeedbackProbe"
+run/main_scene="res://Probe.tscn"
+config/features=PackedStringArray("4.7", "C#")
+
+[dotnet]
+
+project/assembly_name="GdFeedbackGodotHost"

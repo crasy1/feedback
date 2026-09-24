@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  只使用本机 NuGet 缓存：构建因此是 hermetic 的，既不受网络影响，
+  也不会去碰用户级 NuGet.Config 里那些远端源（包含一个明文 PAT 的私有源）。
+-->
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="local-cache" value="__NUGET_CACHE__" />
+  </packageSources>
+</configuration>

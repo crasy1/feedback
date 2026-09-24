@@ -1,0 +1,167 @@
+[gd_scene format=3 uid="uid://d0hb1ajrndvu5"]
+
+[ext_resource type="Script" uid="uid://deus2o0jh17hj" path="res://addons/steamworks/src/ui/SteamUserInfo.cs" id="1_mdhxx"]
+[ext_resource type="Texture2D" uid="uid://dfwhh7tv5gfmi" path="res://addons/steamworks/assets/user-avatar.svg" id="2_mk0wo"]
+[ext_resource type="Texture2D" uid="uid://cw8d0kwqnqa40" path="res://addons/steamworks/assets/voice/volumeZero-Line.svg" id="3_8ymwh"]
+[ext_resource type="Texture2D" uid="uid://x6b7m145ivw1" path="res://addons/steamworks/assets/voice/volumeLow-Line.svg" id="4_d2cur"]
+[ext_resource type="Texture2D" uid="uid://dpc2q8mi1gqlu" path="res://addons/steamworks/assets/voice/volumeMiddle-Line.svg" id="5_35otc"]
+[ext_resource type="Texture2D" uid="uid://c63jahmpyf3ye" path="res://addons/steamworks/assets/voice/volumeHigh-Line.svg" id="6_dsnfq"]
+[ext_resource type="Texture2D" uid="uid://dothbicepmv3" path="res://addons/steamworks/assets/voice/volumeDisable-Line.svg" id="7_d2cur"]
+
+[sub_resource type="Animation" id="Animation_r2bpr"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("FlowContainer/Avatar/Voice:texture_normal")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [ExtResource("3_8ymwh")]
+}
+
+[sub_resource type="Animation" id="Animation_35otc"]
+resource_name = "mute"
+length = 0.01
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("FlowContainer/Avatar/Voice:texture_normal")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [ExtResource("7_d2cur")]
+}
+
+[sub_resource type="Animation" id="Animation_i4oq2"]
+resource_name = "silent"
+length = 0.01
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("FlowContainer/Avatar/Voice:texture_normal")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [ExtResource("3_8ymwh")]
+}
+
+[sub_resource type="Animation" id="Animation_k1f3x"]
+resource_name = "speak"
+length = 0.8
+loop_mode = 1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("FlowContainer/Avatar/Voice:texture_normal")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.2, 0.4, 0.6),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 1,
+"values": [ExtResource("3_8ymwh"), ExtResource("4_d2cur"), ExtResource("5_35otc"), ExtResource("6_dsnfq")]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_1qbwd"]
+_data = {
+&"RESET": SubResource("Animation_r2bpr"),
+&"mute": SubResource("Animation_35otc"),
+&"silent": SubResource("Animation_i4oq2"),
+&"speak": SubResource("Animation_k1f3x")
+}
+
+[node name="SteamUserInfo" type="Control"]
+custom_minimum_size = Vector2(300, 100)
+layout_mode = 3
+anchors_preset = 0
+offset_right = 300.0
+offset_bottom = 100.0
+script = ExtResource("1_mdhxx")
+
+[node name="FlowContainer" type="FlowContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Avatar" type="TextureRect" parent="FlowContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+texture = ExtResource("2_mk0wo")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Voice" type="TextureButton" parent="FlowContainer/Avatar"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 1
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -32.0
+offset_top = -32.0
+grow_horizontal = 0
+grow_vertical = 0
+texture_normal = ExtResource("3_8ymwh")
+ignore_texture_size = true
+stretch_mode = 5
+
+[node name="VBoxContainer" type="VBoxContainer" parent="FlowContainer"]
+layout_mode = 2
+
+[node name="UserName" type="Label" parent="FlowContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "username"
+
+[node name="NickName" type="Label" parent="FlowContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "nickname"
+
+[node name="State" type="Label" parent="FlowContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "状态"
+
+[node name="Menu" type="VBoxContainer" parent="FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="InviteGame" type="Button" parent="FlowContainer/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "邀请到游戏"
+
+[node name="InviteLobby" type="Button" parent="FlowContainer/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "邀请到大厅"
+
+[node name="RemotePlay" type="Button" parent="FlowContainer/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "远程同乐"
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+unique_name_in_owner = true
+libraries = {
+&"": SubResource("AnimationLibrary_1qbwd")
+}

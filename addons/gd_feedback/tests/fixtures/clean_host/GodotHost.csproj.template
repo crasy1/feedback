@@ -1,0 +1,20 @@
+<Project Sdk="Godot.NET.Sdk/__GODOT_SDK__">
+
+  <!--
+    干净宿主 fixture（Godot 宿主分支）。由 tests/verify.ps1 展开到临时目录。
+    插件文件已按 addon.manifest.json 白名单复制到本工程的 addons/gd_feedback/ 下，
+    因此这里什么 Compile 项都不需要：SDK 的默认 glob 会编译它们 —— 与真实宿主完全一致
+    （也顺带证明"白名单里那些文件就足以编译"）。
+    刻意没有任何 PackageReference 与 ProjectReference。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AssemblyName>GdFeedbackGodotHost</AssemblyName>
+    <RootNamespace>GdFeedbackGodotHost</RootNamespace>
+  </PropertyGroup>
+
+</Project>

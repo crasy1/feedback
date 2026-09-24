@@ -35,3 +35,7 @@ _Avoid_: JWT (implementation detail), session token, API key
 **Ownership**:
 The invariant that a Player can only read and comment on their own Feedback, enforced by the server.
 _Avoid_: Permission, visibility
+
+**Feedback Client**:
+The in-game Godot client that authenticates a Player and submits Feedback and Feedback Comments. It ships as an addon in this repository and is installed into a game project by copying it there.
+_Avoid_: SDK, client library, plugin wrapper

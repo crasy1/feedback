@@ -30,6 +30,8 @@ Review / Reply / Change Status
 
 Players must not be required to register an email address or create a separate feedback-system account.
 
+The player side of the flow ships as a Godot addon in this repository (`addons/gd_feedback/`): it obtains the Steam ticket from the game's own Steam integration, exchanges it for an access token, and submits Feedback and Feedback Comments. The server never trusts anything the client asserts about identity.
+
 This project is intentionally small. It is not a CRM, survey platform, public roadmap, community forum, or general-purpose help desk.
 
 ## Out of scope unless requested
@@ -59,6 +61,7 @@ Do not build these preemptively:
 - Domain model: [domain-model.md](domain-model.md)
 - Testing: [testing.md](testing.md)
 - Player API spec: [specs/player-api.md](specs/player-api.md)
+- Godot feedback client addon: [../addons/gd_feedback/README.md](../addons/gd_feedback/README.md)
 - Admin UI spec: [specs/admin-ui.md](specs/admin-ui.md)
 - Attachments (future): [specs/attachments.md](specs/attachments.md)
 - Decision records: [adr/](adr/)

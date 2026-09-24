@@ -28,6 +28,28 @@ dotnet run --project src/GameFeedback
 - Swagger UI：`http://localhost:5087/swagger`（开发环境默认开启，可直接调试玩家 API）
 - 管理后台：`/admin`（首次启动自动创建初始管理员，账号来自 `Admin` 配置段）
 
+### 本地测试环境变量（`.env.local`）
+
+仓库根有一份本地生成的 `.env.local`（**不在版本库里**，已被 `.gitignore` 忽略），内容是 **dev-only** 的本地测试配置：Development、跳过 Steam 验票、开 Swagger、本地 JWT 密钥与管理员账号，全部是假值。
+
+应用本身不读 `.env` 文件（ASP.NET Core 只读 appsettings 与环境变量），docker compose 也只在显式 `--env-file` 时读它——所以用下面这条命令或脚本消费它：
+
+```bash
+# 本地测试主路径：compose 起最新构建（应用在 http://127.0.0.1:3000）
+docker compose --env-file .env.local up -d --build
+python scripts/run_local.py --docker    # 同一条命令，成功后多打印一次 ps 与测试台提示
+
+# 不起容器、直接跑应用（http://localhost:5087）
+python scripts/run_local.py
+python scripts/run_local.py --dry-run    # 只打印解析后的配置（密钥打码），不启动任何东西
+```
+
+起来后手动测试用 [tests/godot-feedback-host/](tests/godot-feedback-host/README.md)：那个 Godot 测试台的 BaseUrl 默认就是 `http://127.0.0.1:3000`，勾「调试登录」即可，先点「健康检查」确认 `/health` 通了。
+
+脚本按 `docker-compose.yml` 的**同一套映射与默认值**把 compose 风格变量翻成 ASP.NET Core 配置键，并提前复现应用的启动校验（例如 `STEAM_DEBUG_SKIP=true` 必须配 `ASPNETCORE_ENVIRONMENT=Development`）。
+
+> 注意：`POSTGRES_PASSWORD` 只在数据卷**首次初始化**时生效。若你已有的 `postgres-data` 卷是用 `.env` 里的密码建的，请把同一个密码填进 `.env.local`，或执行 `docker compose --env-file .env.local down -v` 重建（会删除本地测试数据）。
+
 ## 集成测试
 
 ```bash
@@ -35,6 +57,14 @@ dotnet test
 ```
 
 集成测试通过 Testcontainers 启动真实 PostgreSQL 容器，**运行前需要 Docker Desktop 已启动**；Steam 响应在 HTTP 传输层打桩，无需真实 Steam 凭据。
+
+对运行中的实例做端到端手工验证（登录 → 建反馈 → 所有权/校验/限流负例）：
+
+```bash
+python scripts/smoke_player_api.py     # 需要应用已在 http://localhost:5087 运行
+```
+
+更多测试方式（Swagger UI、真实票据路径）见 [docs/testing.md](docs/testing.md)。
 
 ## 全栈部署
 
@@ -77,3 +107,20 @@ POST /api/feedback/{id}/comments 追加评论（仅限反馈属主）
 ```
 
 详细契约与限额：[docs/specs/player-api.md](docs/specs/player-api.md)。Godot 客户端通过 `GetAuthTicketForWebApi("feedback-api")` 获取票据后调用登录端点。
+
+## Godot 客户端插件
+
+玩家侧对接已随本仓库提供：[addons/gd_feedback/](addons/gd_feedback/README.md)（Godot 4.7 / .NET 10 插件，零宿主依赖、核心引擎无关）。
+安装到游戏项目：把 `addons/gd_feedback/` 复制到目标项目的 `addons/` 下，构建 C# 项目后在 Plugins 里启用。设计与取舍见 [docs/adr/0004](docs/adr/0004-godot-feedback-client-addon.md)。
+
+```bash
+python addons/gd_feedback/tests/verify.py     # 离线验证（身份/白名单、引擎无关核心、干净宿主 fixture、引擎内探针）
+python addons/gd_feedback/tools/package.py    # 按 manifest 白名单打包到 artifacts/
+```
+
+已经装了插件的**完整 Godot 4.7.2 .NET 宿主工程**在 [tests/godot-feedback-host/](tests/godot-feedback-host/README.md)：用 Godot 打开即可交互联调（调试登录 / Steam 出票 / 手输票据，提交·列表·详情·评论，错误码直接打在日志区），也能无界面自检：
+
+```bash
+godot-mono.console.exe --headless --path tests/godot-feedback-host res://Main.tscn -- --lab-selfcheck
+python tests/godot-feedback-host/tools/sync_addon.py -Check   # 校验宿主里的插件副本没有漂移
+```

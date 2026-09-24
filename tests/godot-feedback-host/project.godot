@@ -1,0 +1,40 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="GD Feedback Lab"
+config/description="把 addons/gd_feedback 装进一个真实 Godot 工程，用于自检与联调玩家 API。"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.7", "C#", "Forward Plus")
+
+[audio]
+
+buses/default_bus_layout="res://addons/steamworks/src/resources/custom_bus_layout.tres"
+
+[autoload]
+
+SteamManager="*uid://c2amw4dllr24x"
+GameManager="*uid://etyy7dh6c0aj"
+SceneManager="*uid://bcl6dhr2eked8"
+GdFeedback="*uid://ddhgji5lniwwj"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=800
+
+[dotnet]
+
+project/assembly_name="GdFeedbackHost"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/gd_feedback/plugin.cfg", "res://addons/steamworks/plugin.cfg")

@@ -1,0 +1,260 @@
+[gd_scene format=3 uid="uid://c2amw4dllr24x"]
+
+[ext_resource type="Script" uid="uid://bh3cn1m3bbmh2" path="res://addons/steamworks/src/autoload/SteamManager.cs" id="1_epupd"]
+[ext_resource type="PackedScene" uid="uid://cvgifx0xtsun0" path="res://addons/steamworks/src/ui/SteamLobby.tscn" id="2_hus17"]
+[ext_resource type="Script" uid="uid://bhfqayjo64vl5" path="res://addons/steamworks/src/nodes/VoiceStreamPlayer.cs" id="3_dkm1i"]
+
+[node name="SteamManager" type="CanvasLayer"]
+layer = 100
+script = ExtResource("1_epupd")
+
+[node name="VoiceStreamPlayer" type="AudioStreamPlayer" parent="."]
+unique_name_in_owner = true
+script = ExtResource("3_dkm1i")
+metadata/_custom_type_script = "uid://d3amnc3ow00k8"
+
+[node name="Ui" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="LobbyInfo" type="Control" parent="Ui"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="FlowContainer" type="FlowContainer" parent="Ui/LobbyInfo"]
+layout_mode = 1
+anchors_preset = 13
+anchor_left = 0.5
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -109.0
+offset_right = 107.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Label" type="Label" parent="Ui/LobbyInfo/FlowContainer"]
+layout_mode = 2
+text = "服务器:"
+
+[node name="Label2" type="Label" parent="Ui/LobbyInfo/FlowContainer"]
+layout_mode = 2
+text = "ServerId:"
+
+[node name="ServerIdLabel" type="Label" parent="Ui/LobbyInfo/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="SteamLobby" parent="Ui/LobbyInfo" instance=ExtResource("2_hus17")]
+unique_name_in_owner = true
+layout_mode = 1
+
+[node name="FlowContainer" type="FlowContainer" parent="Ui"]
+layout_mode = 0
+offset_right = 138.0
+offset_bottom = 839.0
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="Ui/FlowContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Ui/FlowContainer/HBoxContainer2"]
+layout_mode = 2
+text = "Steam状态:"
+
+[node name="Connected" type="Label" parent="Ui/FlowContainer/HBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "未连接"
+
+[node name="Ping" type="Label" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ping：100 ms"
+
+[node name="Label2" type="Label" parent="Ui/FlowContainer"]
+layout_mode = 2
+text = "用户信息："
+
+[node name="UserInfo" type="Label" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Label3" type="Label" parent="Ui/FlowContainer"]
+layout_mode = 2
+text = "头像："
+
+[node name="Avatar" type="TextureRect" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="ScreenShot" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "截屏"
+
+[node name="Record" type="CheckButton" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "录音"
+
+[node name="RecordStatus" type="Label" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "未录音"
+
+[node name="PlayRecord" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "播放录音"
+
+[node name="SaveRecord" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+text = "保存录音"
+
+[node name="ShowFriends" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "显示好友列表"
+
+[node name="ShowAchievements" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "显示成就列表"
+
+[node name="StartServer" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "启动服务器"
+
+[node name="ConnectServer" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "连接服务器"
+
+[node name="SearchServer" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "搜索服务器"
+
+[node name="WriteCloud" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "上传到云"
+
+[node name="ReadCloud" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "从云读取"
+
+[node name="DeleteCloud" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "删除文件"
+
+[node name="OpenStore" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "打开游戏商店页面"
+
+[node name="OpenSettings" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "打开steam设置"
+
+[node name="OpenUrl" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "打开web链接"
+
+[node name="OpenFriends" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "打开好友列表"
+
+[node name="OpenPlayers" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "打开玩家"
+
+[node name="OpenCommunity" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "打开社区"
+
+[node name="OpenStats" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "打开状态"
+
+[node name="OpenOfficalGameGroup" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "打开游戏官方组"
+
+[node name="OpenAchievements" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "打开成就"
+
+[node name="CreateLobby" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "创建大厅"
+
+[node name="SearchLobby" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "搜索大厅"
+
+[node name="Test" type="Button" parent="Ui/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "多人测试"
+
+[node name="FriendsScrollContainer" type="ScrollContainer" parent="Ui"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 1564.0
+offset_right = 1880.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="Friends" type="VBoxContainer" parent="Ui/FriendsScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="AchievementsScrollContainer" type="ScrollContainer" parent="Ui"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 1530.0
+offset_right = 1880.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="Achievements" type="VBoxContainer" parent="Ui/AchievementsScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3

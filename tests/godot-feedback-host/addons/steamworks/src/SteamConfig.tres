@@ -1,0 +1,20 @@
+[gd_resource type="Resource" format=3 uid="uid://6frhlu7es6du"]
+
+[resource]
+metadata/AppId = 1910980
+metadata/Debug = false
+metadata/AsServer = false
+metadata/CallbackDebug = false
+metadata/SampleRate = 44100
+metadata/CustomBusLayout = true
+metadata/FileLogLevel = 2
+metadata/GdLogLevel = 1
+metadata/SplashEnabled = false
+metadata/WindowBorderless = false
+metadata/WindowTransparent = false
+metadata/WindowPixelTransparency = false
+metadata/ViewportTransparent = false
+metadata/ViewportClearColor = Color(0, 0, 0, 1)
+metadata/BootSplashColor = Color(0, 0, 0, 1)
+metadata/MainScene = "uid://bye4e4xpr5t3u"
+metadata/BootShowImage = false

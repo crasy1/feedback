@@ -1,0 +1,153 @@
+[gd_scene format=3 uid="uid://cvgifx0xtsun0"]
+
+[ext_resource type="Script" uid="uid://c1qlxms6s02p8" path="res://addons/steamworks/src/ui/SteamLobby.cs" id="1_meg5c"]
+
+[node name="SteamLobby" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_meg5c")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -201.5
+offset_top = -95.0
+offset_right = 201.5
+offset_bottom = 95.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="FlowContainer" type="FlowContainer" parent="HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HBoxContainer3" type="HBoxContainer" parent="HBoxContainer/FlowContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer/FlowContainer/HBoxContainer3"]
+layout_mode = 2
+text = "LobbyId："
+
+[node name="SteamId" type="Label" parent="HBoxContainer/FlowContainer/HBoxContainer3"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="HBoxContainer/FlowContainer"]
+layout_mode = 2
+
+[node name="Label2" type="Label" parent="HBoxContainer/FlowContainer/HBoxContainer"]
+layout_mode = 2
+text = "当前人数："
+
+[node name="CurrentUserLabel" type="Label" parent="HBoxContainer/FlowContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0"
+
+[node name="Label" type="Label" parent="HBoxContainer/FlowContainer/HBoxContainer"]
+layout_mode = 2
+text = "/"
+
+[node name="MaxUserLabel" type="Label" parent="HBoxContainer/FlowContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "4"
+
+[node name="MaxLobbyUser" type="SpinBox" parent="HBoxContainer/FlowContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+value = 4.0
+rounded = true
+prefix = "最大人数"
+
+[node name="Joinable" type="CheckButton" parent="HBoxContainer/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "能否加入："
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="HBoxContainer/FlowContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HBoxContainer/FlowContainer/HBoxContainer2"]
+layout_mode = 2
+text = "房间类型："
+
+[node name="LobbyTypeOption" type="OptionButton" parent="HBoxContainer/FlowContainer/HBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+selected = 2
+item_count = 4
+popup/item_0/text = "私人"
+popup/item_0/id = 0
+popup/item_1/text = "仅好友"
+popup/item_1/id = 1
+popup/item_2/text = "公开"
+popup/item_2/id = 2
+popup/item_3/text = "不可见"
+popup/item_3/id = 3
+
+[node name="CreateLobby" type="Button" parent="HBoxContainer/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "创建"
+
+[node name="Join" type="Button" parent="HBoxContainer/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "加入"
+
+[node name="Invite" type="Button" parent="HBoxContainer/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "邀请"
+
+[node name="Exit" type="Button" parent="HBoxContainer/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "退出"
+
+[node name="Kick" type="Button" parent="HBoxContainer/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "踢出"
+
+[node name="Receive" type="RichTextLabel" parent="HBoxContainer/FlowContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 200)
+layout_mode = 2
+
+[node name="Send" type="Button" parent="HBoxContainer/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "发送"
+
+[node name="SendText" type="TextEdit" parent="HBoxContainer/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "输入聊天信息"
+
+[node name="ConnectServer" type="Button" parent="HBoxContainer/FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "连接服务器(开始游戏)"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="HBoxContainer"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+
+[node name="Friends" type="VBoxContainer" parent="HBoxContainer/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3

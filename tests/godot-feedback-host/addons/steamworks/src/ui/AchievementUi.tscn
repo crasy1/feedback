@@ -1,0 +1,54 @@
+[gd_scene format=3 uid="uid://bhu5bstcybqgu"]
+
+[ext_resource type="Script" uid="uid://ci10vopcrw0bp" path="res://addons/steamworks/src/ui/AchievementUi.cs" id="1_3w7c6"]
+
+[node name="AchievementUI" type="Control"]
+custom_minimum_size = Vector2(120, 120)
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = -1039.0
+offset_bottom = -526.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_3w7c6")
+
+[node name="FlowContainer" type="FlowContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Icon" type="TextureRect" parent="FlowContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+stretch_mode = 5
+
+[node name="Name" type="Label" parent="FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "name"
+
+[node name="Desc" type="Label" parent="FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "desc"
+
+[node name="GlobalUnlocked" type="Label" parent="FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "global"
+
+[node name="UnlockTime" type="Label" parent="FlowContainer"]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+
+[node name="Unlock" type="CheckButton" parent="FlowContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "解锁"

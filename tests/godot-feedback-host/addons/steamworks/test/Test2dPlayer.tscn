@@ -1,0 +1,30 @@
+[gd_scene format=3 uid="uid://q5vydp6ufsn2"]
+
+[ext_resource type="Script" uid="uid://ccb8qgvaqe7jx" path="res://addons/steamworks/test/Test2dPlayer.cs" id="1_72sq8"]
+[ext_resource type="Texture2D" uid="uid://c7j4otde0c7ro" path="res://icon.svg" id="2_wcooh"]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_x278h"]
+radius = 60.0
+height = 120.0
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_72sq8"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 2
+
+[node name="Test2DPlayer" type="CharacterBody2D"]
+script = ExtResource("1_72sq8")
+metadata/_edit_group_ = true
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CapsuleShape2D_x278h")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2_wcooh")
+
+[node name="PlayerCamera" type="Camera2D" parent="."]
+unique_name_in_owner = true
+
+[node name="Synchronizer" type="MultiplayerSynchronizer" parent="."]
+unique_name_in_owner = true
+replication_config = SubResource("SceneReplicationConfig_72sq8")

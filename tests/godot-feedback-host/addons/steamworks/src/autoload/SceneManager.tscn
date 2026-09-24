@@ -1,0 +1,65 @@
+[gd_scene format=3 uid="uid://bcl6dhr2eked8"]
+
+[ext_resource type="Script" uid="uid://cvwc1g7hxp1lu" path="res://addons/steamworks/src/autoload/SceneManager.cs" id="1_evvsr"]
+
+[node name="SceneManager" type="CanvasLayer"]
+layer = 110
+script = ExtResource("1_evvsr")
+
+[node name="SimpleChange" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="SimpleColorRect" type="ColorRect" parent="SimpleChange"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 1)
+
+[node name="Tips" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="Tips"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 300
+theme_override_constants/margin_right = 300
+theme_override_constants/margin_bottom = 100
+
+[node name="TipLabel" type="Label" parent="Tips/MarginContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(20, 30)
+layout_mode = 2
+size_flags_vertical = 8
+text = "tip1"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="BgmPlayer" type="AudioStreamPlayer" parent="."]
+unique_name_in_owner = true
+process_mode = 3
+
+[node name="SfxPlayer" type="AudioStreamPlayer" parent="."]
+unique_name_in_owner = true
+process_mode = 3

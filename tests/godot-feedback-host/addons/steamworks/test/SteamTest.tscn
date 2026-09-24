@@ -1,0 +1,297 @@
+[gd_scene format=3 uid="uid://bye4e4xpr5t3u"]
+
+[ext_resource type="Script" uid="uid://ccn6olk5hfsco" path="res://addons/steamworks/test/SteamTest.cs" id="1_t73qi"]
+
+[node name="SteamTest" type="Node2D"]
+script = ExtResource("1_t73qi")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="HBoxContainer" type="HBoxContainer" parent="CanvasLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer2" type="VBoxContainer" parent="CanvasLayer/HBoxContainer"]
+layout_mode = 2
+
+[node name="ShowFriend" type="Button" parent="CanvasLayer/HBoxContainer/VBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "显示好友"
+
+[node name="Friends" type="VBoxContainer" parent="CanvasLayer/HBoxContainer/VBoxContainer2"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer/HBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CanvasLayer/HBoxContainer/VBoxContainer"]
+layout_mode = 2
+text = "SteamNetworking P2P"
+
+[node name="P2PText" type="TextEdit" parent="CanvasLayer/HBoxContainer/VBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 50)
+layout_mode = 2
+placeholder_text = "输入发送的内容"
+
+[node name="DisconnectP2P" type="Button" parent="CanvasLayer/HBoxContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "断开连接"
+
+[node name="SendP2P" type="Button" parent="CanvasLayer/HBoxContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "发送"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="CanvasLayer/HBoxContainer/VBoxContainer"]
+custom_minimum_size = Vector2(0, 200)
+layout_mode = 2
+
+[node name="P2PReceiveText" type="RichTextLabel" parent="CanvasLayer/HBoxContainer/VBoxContainer/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="NormalS" type="VBoxContainer" parent="CanvasLayer/HBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CanvasLayer/HBoxContainer/NormalS"]
+layout_mode = 2
+text = "SteamNetworkingSockets Normal Server"
+
+[node name="NormalServerPort" type="SpinBox" parent="CanvasLayer/HBoxContainer/NormalS"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+min_value = 10000.0
+max_value = 65535.0
+value = 10000.0
+rounded = true
+prefix = "端口：          "
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="CanvasLayer/HBoxContainer/NormalS"]
+layout_mode = 2
+
+[node name="CreateNormalServer" type="Button" parent="CanvasLayer/HBoxContainer/NormalS/HBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "创建normal服务器"
+
+[node name="CloseNormalServer" type="Button" parent="CanvasLayer/HBoxContainer/NormalS/HBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "关闭normal服务器"
+
+[node name="NormalServerText" type="TextEdit" parent="CanvasLayer/HBoxContainer/NormalS"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 50)
+layout_mode = 2
+placeholder_text = "输入发送的内容"
+
+[node name="SendToClientNormal" type="Button" parent="CanvasLayer/HBoxContainer/NormalS"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "发送"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="CanvasLayer/HBoxContainer/NormalS"]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+
+[node name="NormalServerReceiveText" type="RichTextLabel" parent="CanvasLayer/HBoxContainer/NormalS/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="NormalServerConnections" type="FlowContainer" parent="CanvasLayer/HBoxContainer/NormalS"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="NormalC" type="VBoxContainer" parent="CanvasLayer/HBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CanvasLayer/HBoxContainer/NormalC"]
+layout_mode = 2
+text = "SteamNetworkingSockets Normal Client"
+
+[node name="HBoxContainer" type="HBoxContainer" parent="CanvasLayer/HBoxContainer/NormalC"]
+layout_mode = 2
+
+[node name="NormalIp" type="TextEdit" parent="CanvasLayer/HBoxContainer/NormalC/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "目标ip"
+
+[node name="NormalPort" type="SpinBox" parent="CanvasLayer/HBoxContainer/NormalC/HBoxContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 10000.0
+max_value = 65535.0
+value = 10000.0
+rounded = true
+prefix = "端口:   "
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="CanvasLayer/HBoxContainer/NormalC"]
+layout_mode = 2
+
+[node name="ConnectNormalClient" type="Button" parent="CanvasLayer/HBoxContainer/NormalC/HBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "连接normal服务器"
+
+[node name="DisconnectNormalClient" type="Button" parent="CanvasLayer/HBoxContainer/NormalC/HBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "断开normal服务器"
+
+[node name="NormalClientText" type="TextEdit" parent="CanvasLayer/HBoxContainer/NormalC"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 50)
+layout_mode = 2
+placeholder_text = "输入发送的内容"
+
+[node name="SendToNormalServer" type="Button" parent="CanvasLayer/HBoxContainer/NormalC"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "发送"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="CanvasLayer/HBoxContainer/NormalC"]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+
+[node name="NormalClientReceiveText" type="RichTextLabel" parent="CanvasLayer/HBoxContainer/NormalC/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="NormalClientConnections" type="FlowContainer" parent="CanvasLayer/HBoxContainer/NormalC"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="RelayS" type="VBoxContainer" parent="CanvasLayer/HBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CanvasLayer/HBoxContainer/RelayS"]
+layout_mode = 2
+text = "SteamNetworkingSockets Relay Server"
+
+[node name="RelayServerPort" type="SpinBox" parent="CanvasLayer/HBoxContainer/RelayS"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+min_value = 20000.0
+max_value = 65535.0
+value = 20000.0
+rounded = true
+prefix = "端口：          "
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="CanvasLayer/HBoxContainer/RelayS"]
+layout_mode = 2
+
+[node name="CreateRelayServer" type="Button" parent="CanvasLayer/HBoxContainer/RelayS/HBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "创建Relay服务器"
+
+[node name="CloseRelayServer" type="Button" parent="CanvasLayer/HBoxContainer/RelayS/HBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "关闭Relay服务器"
+
+[node name="RelayServerText" type="TextEdit" parent="CanvasLayer/HBoxContainer/RelayS"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 50)
+layout_mode = 2
+placeholder_text = "输入发送的内容"
+
+[node name="SendToClientRelay" type="Button" parent="CanvasLayer/HBoxContainer/RelayS"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "发送"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="CanvasLayer/HBoxContainer/RelayS"]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+
+[node name="RelayServerReceiveText" type="RichTextLabel" parent="CanvasLayer/HBoxContainer/RelayS/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="RelayServerConnections" type="FlowContainer" parent="CanvasLayer/HBoxContainer/RelayS"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="RelayC" type="VBoxContainer" parent="CanvasLayer/HBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="CanvasLayer/HBoxContainer/RelayC"]
+layout_mode = 2
+text = "SteamNetworkingSockets Normal Client"
+
+[node name="RelayPort" type="SpinBox" parent="CanvasLayer/HBoxContainer/RelayC"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 20000.0
+max_value = 65535.0
+value = 20000.0
+rounded = true
+prefix = "端口:          "
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="CanvasLayer/HBoxContainer/RelayC"]
+layout_mode = 2
+
+[node name="ConnectRelayClient" type="Button" parent="CanvasLayer/HBoxContainer/RelayC/HBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "连接Relay服务器"
+
+[node name="DisconnectRelayClient" type="Button" parent="CanvasLayer/HBoxContainer/RelayC/HBoxContainer2"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "断开Relay服务器"
+
+[node name="RelayClientText" type="TextEdit" parent="CanvasLayer/HBoxContainer/RelayC"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 50)
+layout_mode = 2
+placeholder_text = "输入发送的内容"
+
+[node name="SendToRelayServer" type="Button" parent="CanvasLayer/HBoxContainer/RelayC"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "发送"
+
+[node name="ScrollContainer" type="ScrollContainer" parent="CanvasLayer/HBoxContainer/RelayC"]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+
+[node name="RelayClientReceiveText" type="RichTextLabel" parent="CanvasLayer/HBoxContainer/RelayC/ScrollContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="RelayClientConnections" type="FlowContainer" parent="CanvasLayer/HBoxContainer/RelayC"]
+unique_name_in_owner = true
+layout_mode = 2

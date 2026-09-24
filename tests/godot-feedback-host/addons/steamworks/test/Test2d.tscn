@@ -1,0 +1,109 @@
+[gd_scene format=3 uid="uid://bhslj14rdsk7p"]
+
+[ext_resource type="Script" uid="uid://c7a6sgyyb7hdm" path="res://addons/steamworks/test/Test2d.cs" id="1_linxh"]
+[ext_resource type="Texture2D" uid="uid://c7j4otde0c7ro" path="res://icon.svg" id="2_qf28k"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_linxh"]
+size = Vector2(600, 100)
+
+[node name="Test2D" type="Node2D"]
+script = ExtResource("1_linxh")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="Menu" type="VBoxContainer" parent="CanvasLayer"]
+unique_name_in_owner = true
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -44.0
+offset_right = 44.0
+offset_bottom = 171.0
+grow_horizontal = 2
+size_flags_vertical = 4
+
+[node name="Search" type="Button" parent="CanvasLayer/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "搜索服务器"
+
+[node name="Create" type="Button" parent="CanvasLayer/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "创建服务器"
+
+[node name="SocketType" type="OptionButton" parent="CanvasLayer/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+selected = 0
+item_count = 5
+popup/item_0/text = "p2p"
+popup/item_0/id = 0
+popup/item_1/text = "msgp2p"
+popup/item_1/id = 1
+popup/item_2/text = "relay"
+popup/item_2/id = 2
+popup/item_3/text = "normal"
+popup/item_3/id = 3
+popup/item_4/text = "enet"
+popup/item_4/id = 4
+
+[node name="Host" type="LineEdit" parent="CanvasLayer/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "122.246.0.254"
+alignment = 1
+
+[node name="Join" type="Button" parent="CanvasLayer/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "加入服务器"
+
+[node name="Exit" type="Button" parent="CanvasLayer/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "退出服务器"
+
+[node name="Send" type="Button" parent="CanvasLayer/Menu"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "发送消息"
+
+[node name="Friends" type="VBoxContainer" parent="CanvasLayer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 0)
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_right = 200.0
+grow_vertical = 2
+
+[node name="StaticBody2D" type="StaticBody2D" parent="."]
+position = Vector2(648, 768)
+metadata/_edit_group_ = true
+
+[node name="Icon" type="Sprite2D" parent="StaticBody2D"]
+position = Vector2(2.4999924, 1.0000229)
+scale = Vector2(4.6953125, 0.79687536)
+texture = ExtResource("2_qf28k")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="StaticBody2D"]
+shape = SubResource("RectangleShape2D_linxh")
+
+[node name="StaticBody2D2" type="StaticBody2D" parent="."]
+position = Vector2(1285, 764)
+metadata/_edit_group_ = true
+
+[node name="Icon2" type="Sprite2D" parent="StaticBody2D2"]
+scale = Vector2(4.6953125, 0.79687536)
+texture = ExtResource("2_qf28k")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="StaticBody2D2"]
+shape = SubResource("RectangleShape2D_linxh")
+metadata/_edit_group_ = true
+
+[node name="Spawner" type="MultiplayerSpawner" parent="."]
+unique_name_in_owner = true
+spawn_path = NodePath("../Players")
+
+[node name="Players" type="Node2D" parent="."]
+unique_name_in_owner = true

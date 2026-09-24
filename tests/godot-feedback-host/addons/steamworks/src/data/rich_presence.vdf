@@ -1,0 +1,10 @@
+"lang"
+{
+	"Language"	"english"
+	"Tokens"
+	{
+		"#Status_Custom"	"%Custom%"
+		"#Status_AtMainMenu"	"%AtMainMenu%"
+		"#Status_WaitingForMatch"	"%WaitingForMatch%"
+	}
+}

@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://ci2mpttyiri8s"]
+
+[ext_resource type="Script" uid="uid://d3ccygy6j6yc" path="res://addons/steamworks/test/MultiplayerRuntimeCheck.cs" id="1_cbmnh"]
+
+[node name="MultiplayerRuntimeCheck" type="Node" unique_id=1464276683]
+script = ExtResource("1_cbmnh")

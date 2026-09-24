@@ -1,5 +1,7 @@
 .git
 .env
+.env.local
+.env.*.local
 bin/
 obj/
 **/bin/
@@ -10,3 +12,4 @@ docs/
 *.md
 docker-compose.yml
 Dockerfile
+addons/

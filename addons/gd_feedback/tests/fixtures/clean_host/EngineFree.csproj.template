@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    干净宿主 fixture（引擎无关分支）。由 tests/verify.ps1 展开到临时目录。
+    它只编译 FeedbackRuntime / FeedbackContracts / FeedbackAbstractions —— 一旦这三个文件
+    引用 Godot，这里就编译不过，这正是"插件核心不绑定引擎"这条产品属性的证明。
+    刻意没有任何 PackageReference 与 ProjectReference。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>GdFeedbackHarness</AssemblyName>
+    <RootNamespace>GdFeedbackHarness</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="__ADDON_ROOT__/FeedbackContracts.cs" />
+    <Compile Include="__ADDON_ROOT__/FeedbackAbstractions.cs" />
+    <Compile Include="__ADDON_ROOT__/FeedbackRuntime.cs" />
+    <Compile Include="Harness.cs" />
+  </ItemGroup>
+
+</Project>
