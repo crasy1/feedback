@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using GameFeedback.Services;
 using GameFeedback.Tests.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,7 +10,7 @@ namespace GameFeedback.Tests;
 [Collection("Integration")]
 public sealed class FeedbackEndpointTests(IntegrationTestFixture fixture)
 {
-    private static object ValidBody(string title = "崩溃", string content = "进地图必崩", string? steamIdBogus = null)
+    private static Dictionary<string, object?> ValidBody(string title = "崩溃", string content = "进地图必崩", string? steamIdBogus = null)
     {
         var body = new Dictionary<string, object?>
         {
@@ -189,6 +190,166 @@ public sealed class FeedbackEndpointTests(IntegrationTestFixture fixture)
         var limited = await client.PostAsJsonAsync("/api/feedback",
             new Dictionary<string, object?> { ["type"] = "Bug", ["title"] = "t6", ["content"] = "c" });
         Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_stores_auto_collected_environment_fields()
+    {
+        var (_, client, _) = await PlayerClient.CreateAsync(fixture, PlayerClient.UniqueSteamId());
+
+        var body = ValidBody();
+        body["cpu"] = "Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz";
+        body["memoryTotalMb"] = 16384;
+
+        var created = await client.PostAsJsonAsync("/api/feedback", body);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var createdBody = await created.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz", createdBody.GetProperty("cpu").GetString());
+        Assert.Equal(16384, createdBody.GetProperty("memoryTotalMb").GetInt32());
+
+        var id = createdBody.GetProperty("id").GetInt32();
+        var detail = await client.GetFromJsonAsync<JsonElement>($"/api/feedback/{id}");
+        Assert.Equal("Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz", detail.GetProperty("cpu").GetString());
+        Assert.Equal(16384, detail.GetProperty("memoryTotalMb").GetInt32());
+    }
+
+    /// <summary>
+    /// 自动采集字段越界时只丢弃、不报错：玩家既没有输入它们，也无法修正它们，
+    /// 400 只会让他白写一遍正文。手填元数据（title/content 等）的 400 行为不变。
+    /// </summary>
+    [Fact]
+    public async Task Create_drops_overlong_cpu_without_rejecting()
+    {
+        var (_, client, _) = await PlayerClient.CreateAsync(fixture, PlayerClient.UniqueSteamId());
+
+        var body = ValidBody();
+        body["cpu"] = new string('x', FeedbackService.CpuMaxLength + 1);
+
+        var created = await client.PostAsJsonAsync("/api/feedback", body);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var createdBody = await created.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, createdBody.GetProperty("cpu").ValueKind);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(4_194_305)]
+    public async Task Create_drops_out_of_range_memory_without_rejecting(int memoryTotalMb)
+    {
+        var (_, client, _) = await PlayerClient.CreateAsync(fixture, PlayerClient.UniqueSteamId());
+
+        var body = ValidBody();
+        body["memoryTotalMb"] = memoryTotalMb;
+
+        var created = await client.PostAsJsonAsync("/api/feedback", body);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var createdBody = await created.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, createdBody.GetProperty("memoryTotalMb").ValueKind);
+    }
+
+    [Fact]
+    public async Task Create_snapshots_steam_playtime()
+    {
+        var steamId = PlayerClient.UniqueSteamId();
+        var (_, client, steam) = await PlayerClient.CreateAsync(fixture, steamId);
+        steam.SetPlaytimeResponse(FakeSteamHandler.Playtime(2361));
+
+        var created = await client.PostAsJsonAsync("/api/feedback", ValidBody());
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var createdBody = await created.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(2361, createdBody.GetProperty("playtimeMinutes").GetInt32());
+
+        var id = createdBody.GetProperty("id").GetInt32();
+        var detail = await client.GetFromJsonAsync<JsonElement>($"/api/feedback/{id}");
+        Assert.Equal(2361, detail.GetProperty("playtimeMinutes").GetInt32());
+
+        // 查询参数取自服务端配置与认证主体：appid 来自 Steam:AppId（测试里是 480），
+        // steamid 来自 JWT 的 sub，绝不来自请求体。
+        var playtimeCall = Assert.Single(
+            steam.RequestedPaths,
+            p => p.Contains("GetSingleGamePlaytime", StringComparison.Ordinal));
+        Assert.Contains($"steamid={steamId}", playtimeCall);
+        Assert.Contains("appid=480", playtimeCall);
+    }
+
+    /// <summary>0 是合法值（拥有但从未玩过），必须存 0 而不是 null。</summary>
+    [Fact]
+    public async Task Create_stores_zero_playtime_as_zero()
+    {
+        var (_, client, steam) = await PlayerClient.CreateAsync(fixture, PlayerClient.UniqueSteamId());
+        steam.SetPlaytimeResponse(FakeSteamHandler.Playtime(0));
+
+        var created = await client.PostAsJsonAsync("/api/feedback", ValidBody());
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var createdBody = await created.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(0, createdBody.GetProperty("playtimeMinutes").GetInt32());
+    }
+
+    /// <summary>
+    /// 服务端查询游玩时长是尽力而为：Steam 故障、资料私密、字段缺失、超时，
+    /// 一律只让该字段为 null，**提交本身照常 201**——玩家不该因此白写一遍正文。
+    /// </summary>
+    [Fact]
+    public async Task Create_succeeds_with_null_playtime_when_steam_fails()
+    {
+        var (_, client, steam) = await PlayerClient.CreateAsync(fixture, PlayerClient.UniqueSteamId());
+        steam.SetPlaytimeResponse(FakeSteamHandler.SteamServerError());
+
+        var created = await client.PostAsJsonAsync("/api/feedback", ValidBody());
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var createdBody = await created.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, createdBody.GetProperty("playtimeMinutes").ValueKind);
+    }
+
+    [Fact]
+    public async Task Create_succeeds_with_null_playtime_when_field_is_absent()
+    {
+        var (_, client, steam) = await PlayerClient.CreateAsync(fixture, PlayerClient.UniqueSteamId());
+        steam.SetPlaytimeResponse(FakeSteamHandler.PlaytimeMissingField());
+
+        var created = await client.PostAsJsonAsync("/api/feedback", ValidBody());
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var createdBody = await created.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, createdBody.GetProperty("playtimeMinutes").ValueKind);
+    }
+
+    [Fact]
+    public async Task Create_succeeds_with_null_playtime_when_lookup_times_out()
+    {
+        var (_, client, steam) = await PlayerClient.CreateAsync(fixture, PlayerClient.UniqueSteamId());
+        // 比服务端的查询预算多 1 秒：请求必然被预算取消，而不是等满 HttpClient 的 10 秒超时。
+        steam.PlaytimeDelay = SteamPlaytimeService.LookupBudget + TimeSpan.FromSeconds(1);
+
+        var created = await client.PostAsJsonAsync("/api/feedback", ValidBody());
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var createdBody = await created.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, createdBody.GetProperty("playtimeMinutes").ValueKind);
+    }
+
+    /// <summary>防伪造：请求体里的 playtimeMinutes 必须被忽略，落库值只来自服务端查询。</summary>
+    [Fact]
+    public async Task Create_ignores_body_playtime_minutes()
+    {
+        var (_, client, steam) = await PlayerClient.CreateAsync(fixture, PlayerClient.UniqueSteamId());
+        steam.SetPlaytimeResponse(FakeSteamHandler.Playtime(120));
+
+        var body = ValidBody();
+        body["playtimeMinutes"] = 999_999;
+
+        var created = await client.PostAsJsonAsync("/api/feedback", body);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var createdBody = await created.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(120, createdBody.GetProperty("playtimeMinutes").GetInt32());
     }
 
     [Fact]

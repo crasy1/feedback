@@ -66,6 +66,41 @@ public sealed class DomainPersistenceTests(IntegrationTestFixture fixture)
     }
 
     [Fact]
+    public async Task Environment_and_playtime_fields_round_trip()
+    {
+        using var db = await CreateContextAsync();
+        var steamId = $"300000{Guid.NewGuid():N}"[..20];
+
+        var player = new Player
+        {
+            SteamId = steamId,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        var feedback = new Feedback
+        {
+            Player = player,
+            Type = FeedbackType.Bug,
+            Title = "崩溃",
+            Content = "进地图崩溃",
+            Gpu = "RTX 4070",
+            Cpu = "Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz",
+            MemoryTotalMb = 16384,
+            PlaytimeMinutes = 2361,
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.Feedbacks.Add(feedback);
+        await db.SaveChangesAsync();
+
+        db.ChangeTracker.Clear();
+        var reloaded = await db.Feedbacks.SingleAsync(f => f.Id == feedback.Id);
+
+        Assert.Equal("Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz", reloaded.Cpu);
+        Assert.Equal(16384, reloaded.MemoryTotalMb);
+        Assert.Equal(2361, reloaded.PlaytimeMinutes);
+    }
+
+    [Fact]
     public async Task Duplicate_steam_id_is_rejected_by_database()
     {
         using var db = await CreateContextAsync();

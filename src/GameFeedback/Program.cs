@@ -58,6 +58,7 @@ builder.Services.AddHttpClient("Steam", client =>
 });
 
 builder.Services.AddScoped<SteamAuthService>();
+builder.Services.AddScoped<SteamPlaytimeService>();
 builder.Services.AddScoped<TokenService>();
 builder.Services.AddScoped<PlayerService>();
 builder.Services.AddScoped<FeedbackService>();
@@ -207,6 +208,8 @@ static JsonObject FeedbackRequestExample() => new()
     ["buildNumber"] = "456",
     ["operatingSystem"] = "Windows 11",
     ["gpu"] = "RTX 4070",
+    ["cpu"] = "Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz",
+    ["memoryTotalMb"] = 16384,
     ["locale"] = "zh-CN",
     ["map"] = "arena_01",
     ["character"] = "mage",
@@ -295,9 +298,10 @@ if (enableSwaggerDocs)
         // 因此必须在 operation 上再写一份。
         options.AddOperationTransformer((operation, context, cancellationToken) =>
         {
-            if (operation.RequestBody?.Content.TryGetValue("application/json", out var media) == true)
+            if (operation.RequestBody?.Content?.TryGetValue("application/json", out var media) == true
+                && media is not null)
             {
-                media.Example = RequestBodyExampleFor(NormalizeOperationPath(context.Description.RelativePath));
+                media.Example = RequestBodyExampleFor(NormalizeOperationPath(context.Description.RelativePath ?? string.Empty));
             }
             return Task.CompletedTask;
         });

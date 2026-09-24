@@ -20,6 +20,7 @@ public static class FeedbackEndpoints
             CreateFeedbackRequest? request,
             ClaimsPrincipal user,
             FeedbackService feedbacks,
+            SteamPlaytimeService playtime,
             CancellationToken cancellationToken) =>
         {
             var steamId = user.FindFirst("sub")?.Value;
@@ -44,8 +45,11 @@ public static class FeedbackEndpoints
                 return Results.Unauthorized();
             }
 
-            // SteamID 来自认证主体，与请求体无关。
-            var feedback = await feedbacks.CreateAsync(playerId.Value, request, cancellationToken);
+            // 游玩时长由服务端向 Steam 查询后快照到这条反馈上；取不到就是 null，
+            // 绝不因此拒绝提交（见 issue 03 与 ADR-0006）。SteamID 来自认证主体，与请求体无关。
+            var playtimeMinutes = await playtime.GetPlaytimeMinutesAsync(steamId, cancellationToken);
+
+            var feedback = await feedbacks.CreateAsync(playerId.Value, request, playtimeMinutes, cancellationToken);
             return Results.Created($"/api/feedback/{feedback.Id}", FeedbackService.ToDto(feedback));
         })
         .WithSummary("创建反馈")

@@ -35,6 +35,9 @@ public class FeedbackConfiguration : IEntityTypeConfiguration<Feedback>
         builder.Property(f => f.BuildNumber).HasMaxLength(64);
         builder.Property(f => f.OperatingSystem).HasMaxLength(100);
         builder.Property(f => f.Gpu).HasMaxLength(100);
+        builder.Property(f => f.Cpu).HasMaxLength(120);
+        builder.Property(f => f.MemoryTotalMb);
+        builder.Property(f => f.PlaytimeMinutes);
         builder.Property(f => f.Locale).HasMaxLength(32);
         builder.Property(f => f.Map).HasMaxLength(100);
         builder.Property(f => f.Character).HasMaxLength(100);

@@ -7,11 +7,21 @@ using Microsoft.EntityFrameworkCore;
 namespace GameFeedback.Services;
 
 /// <summary>反馈的创建与玩家侧查询。所有权在查询层强制。</summary>
-public class FeedbackService(AppDbContext db)
+public class FeedbackService(AppDbContext db, ILogger<FeedbackService> logger)
 {
     public const int MineMaxItems = 100;
 
-    /// <summary>按玩家可见限额校验请求；返回错误消息，null 表示通过。</summary>
+    /// <summary>CPU 型号上限，与 <c>FeedbackConfiguration</c> 的列长一致。</summary>
+    public const int CpuMaxLength = 120;
+
+    /// <summary>物理内存总量上限（MB）= 4 TiB。</summary>
+    public const int MemoryMaxMb = 4 * 1024 * 1024;
+
+    /// <summary>
+    /// 按玩家可见限额校验请求；返回错误消息，null 表示通过。
+    /// 注意：客户端自动采集的字段（<c>Cpu</c>/<c>MemoryTotalMb</c>）<b>不在</b>这里校验——
+    /// 玩家既没有输入它们、也无法修正它们，越界只会被丢弃（见 <see cref="CreateAsync"/>），绝不导致 400。
+    /// </summary>
     public static string? Validate(CreateFeedbackRequest request)
     {
         // 只接受类型名称，拒绝 Enum.TryParse 支持的数字和逗号组合。
@@ -54,8 +64,18 @@ public class FeedbackService(AppDbContext db)
         return player;
     }
 
-    public async Task<Feedback> CreateAsync(int playerId, CreateFeedbackRequest request, CancellationToken cancellationToken)
+    /// <summary>
+    /// 写入一条反馈。<paramref name="playtimeMinutes"/> 由调用方（端点）从
+    /// <see cref="SteamPlaytimeService"/> 取好后传入——本服务刻意只依赖 <c>AppDbContext</c>，
+    /// 不注入 HTTP 依赖。取不到时长时传 <c>null</c>。
+    /// </summary>
+    public async Task<Feedback> CreateAsync(int playerId, CreateFeedbackRequest request, int? playtimeMinutes, CancellationToken cancellationToken)
     {
+        // 自动采集字段按"不可信、咨询性"处理：越界即丢弃并记 Warning，
+        // 绝不因为玩家的机器信息让整条反馈失败（那样玩家会白写一遍正文）。
+        var cpu = NormalizeCpu(request.Cpu, playerId);
+        var memoryTotalMb = NormalizeMemoryTotalMb(request.MemoryTotalMb, playerId);
+
         var feedback = new Feedback
         {
             PlayerId = playerId,
@@ -67,6 +87,9 @@ public class FeedbackService(AppDbContext db)
             BuildNumber = request.BuildNumber,
             OperatingSystem = request.OperatingSystem,
             Gpu = request.Gpu,
+            Cpu = cpu,
+            MemoryTotalMb = memoryTotalMb,
+            PlaytimeMinutes = playtimeMinutes,
             Locale = request.Locale,
             Map = request.Map,
             Character = request.Character,
@@ -75,6 +98,49 @@ public class FeedbackService(AppDbContext db)
         db.Feedbacks.Add(feedback);
         await db.SaveChangesAsync(cancellationToken);
         return feedback;
+    }
+
+    /// <summary>CPU 型号：去空白；超长按"丢弃"处理而不是报错（自动采集字段，玩家无法修正）。</summary>
+    private string? NormalizeCpu(string? value, int playerId)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.Length > CpuMaxLength)
+        {
+            logger.LogWarning(
+                "反馈的 CPU 字段被丢弃：长度 {Length} 超过上限 {MaxLength}，PlayerId={PlayerId}",
+                trimmed.Length,
+                CpuMaxLength,
+                playerId);
+            return null;
+        }
+
+        return trimmed;
+    }
+
+    /// <summary>物理内存总量（MB）：越界按"丢弃"处理而不是报错。</summary>
+    private int? NormalizeMemoryTotalMb(int? value, int playerId)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (value <= 0 || value > MemoryMaxMb)
+        {
+            logger.LogWarning(
+                "反馈的内存字段被丢弃：MemoryTotalMb={MemoryTotalMb} 不在 1..{MaxMb} 内，PlayerId={PlayerId}",
+                value,
+                MemoryMaxMb,
+                playerId);
+            return null;
+        }
+
+        return value;
     }
 
     /// <summary>玩家自己的反馈（最新在前，最多 100 条）。查询层即所有权边界。</summary>
@@ -130,6 +196,9 @@ public class FeedbackService(AppDbContext db)
         feedback.BuildNumber,
         feedback.OperatingSystem,
         feedback.Gpu,
+        feedback.Cpu,
+        feedback.MemoryTotalMb,
+        feedback.PlaytimeMinutes,
         feedback.Locale,
         feedback.Map,
         feedback.Character,
@@ -145,6 +214,9 @@ public class FeedbackService(AppDbContext db)
         feedback.BuildNumber,
         feedback.OperatingSystem,
         feedback.Gpu,
+        feedback.Cpu,
+        feedback.MemoryTotalMb,
+        feedback.PlaytimeMinutes,
         feedback.Locale,
         feedback.Map,
         feedback.Character,
