@@ -285,7 +285,9 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
         var missing = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "" });
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, missing.StatusCode);
 
-        var oversized = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = new string('x', 5000) });
+        // 上限是 8192（真实 5120 字符票据必须被接受，见 Real_world_ticket_length_is_accepted），
+        // 所以"超长"必须真的超过 8192：早先这里的字面量是 5000，在上限上调到 8192 后落进了接受区间。
+        var oversized = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = new string('x', 8193) });
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, oversized.StatusCode);
 
         Assert.Empty(steam.RequestedPaths);
