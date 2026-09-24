@@ -39,6 +39,8 @@ internal static class Program
         await Run("debug login sends debugSteamId when enabled", DebugLoginOnSendsSteamIdAsync);
         await Run("debug login rejects a malformed SteamID64", DebugLoginRejectsMalformedSteamIdAsync);
         await Run("submit sends the bearer token and camelCase type", SubmitSendsBearerAndTypeAsync);
+        await Run("out-of-range auto-collected fields are dropped, not fatal", AutoCollectedFieldsAreDroppedWhenOutOfRangeAsync);
+        await Run("environment and playtime fields are parsed", EnvironmentAndPlaytimeAreParsedAsync);
         await Run("token is reused across calls", TokenReusedAcrossCallsAsync);
         await Run("expired cached token triggers a new login", ExpiredTokenTriggersLoginAsync);
         await Run("fresh cached token skips login", FreshTokenSkipsLoginAsync);
@@ -279,7 +281,9 @@ internal static class Program
                 "title",
                 "content",
                 GameVersion: "1.2.3",
-                Map: "arena_01"))
+                Map: "arena_01",
+                Cpu: "Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz",
+                MemoryTotalMb: 16384))
             .GetAwaiter().GetResult();
 
         PlayerFeedback feedback = Value(result);
@@ -291,6 +295,54 @@ internal static class Program
         Check(submit.Body.Contains("\"type\":\"Bug\"", StringComparison.Ordinal), "type must be the enum name, not a number");
         Check(submit.Body.Contains("\"gameVersion\":\"1.2.3\"", StringComparison.Ordinal), "metadata must serialize as camelCase");
         Check(submit.Body.Contains("\"map\":\"arena_01\"", StringComparison.Ordinal), "map metadata missing");
+        Check(
+            submit.Body.Contains("\"cpu\":\"Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz\"", StringComparison.Ordinal),
+            "cpu must be sent");
+        Check(submit.Body.Contains("\"memoryTotalMb\":16384", StringComparison.Ordinal), "memoryTotalMb must be sent as a camelCase number");
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 自动采集字段越界只丢弃、不报错：玩家既没有输入它们，也无法修正它们，
+    /// 让提交失败只会让他白写一遍正文。规则与服务端一致。
+    /// </summary>
+    private static Task AutoCollectedFieldsAreDroppedWhenOutOfRangeAsync()
+    {
+        StubHandler handler = new();
+        handler.RespondJson(HttpStatusCode.OK, LoginJson("token-18"));
+        handler.RespondJson(HttpStatusCode.Created, FeedbackJson(43));
+        using FeedbackRuntime runtime = Runtime(handler);
+
+        FeedbackResult<PlayerFeedback> result = runtime
+            .SubmitAsync(new PlayerFeedbackDraft(
+                PlayerFeedbackType.Bug,
+                "t",
+                "c",
+                Cpu: new string('x', PlayerFeedbackValidation.CpuMaxLength + 1),
+                MemoryTotalMb: PlayerFeedbackValidation.MemoryMaxMb + 1))
+            .GetAwaiter().GetResult();
+
+        Check(result.Succeeded, $"an out-of-range auto-collected field must not fail the submission, got {result.Failure?.Code ?? "none"}");
+        Check(handler.Requests.Count == 2, "expected login + submit");
+        string body = handler.Requests[1].Body;
+        Check(!body.Contains("\"cpu\"", StringComparison.Ordinal), "an over-long cpu must be dropped from the body");
+        Check(!body.Contains("\"memoryTotalMb\"", StringComparison.Ordinal), "an out-of-range memoryTotalMb must be dropped from the body");
+        return Task.CompletedTask;
+    }
+
+    /// <summary>新增的三个只读字段必须能从响应里解析出来（列表与详情共用同一形状）。</summary>
+    private static Task EnvironmentAndPlaytimeAreParsedAsync()
+    {
+        StubHandler handler = new();
+        handler.RespondJson(HttpStatusCode.OK, LoginJson("token-19"));
+        handler.RespondJson(HttpStatusCode.OK, $"[{FeedbackBody(1, "first")}]");
+        using FeedbackRuntime runtime = Runtime(handler);
+
+        IReadOnlyList<PlayerFeedback> items = Value(runtime.ListMineAsync().GetAwaiter().GetResult());
+
+        Check(items[0].Cpu == "Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz", "cpu not parsed from the list payload");
+        Check(items[0].MemoryTotalMb == 16384, "memoryTotalMb not parsed from the list payload");
+        Check(items[0].PlaytimeMinutes == 2361, "playtimeMinutes not parsed from the list payload");
         return Task.CompletedTask;
     }
 
@@ -602,6 +654,9 @@ internal static class Program
                 buildNumber = "1",
                 operatingSystem = "Windows 11",
                 gpu = "RTX",
+                cpu = "Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz",
+                memoryTotalMb = 16384,
+                playtimeMinutes = 2361,
                 locale = "zh-CN",
                 map = "arena_01",
                 character = "mage",
@@ -619,6 +674,8 @@ internal static class Program
         Check(detail.Id == 5, "detail id not parsed");
         Check(detail.Comments.Count == 1, "comments not parsed");
         Check(detail.Comments[0].AuthorType == "Player", "authorType not parsed");
+        Check(detail.PlaytimeMinutes == 2361, "playtimeMinutes not parsed from the detail payload");
+        Check(detail.Cpu == "Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz", "cpu not parsed from the detail payload");
         return Task.CompletedTask;
     }
 
@@ -748,6 +805,9 @@ internal static class Program
         buildNumber = "456",
         operatingSystem = "Windows 11",
         gpu = "RTX 4070",
+        cpu = "Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz",
+        memoryTotalMb = 16384,
+        playtimeMinutes = 2361,
         locale = "zh-CN",
         map = "arena_01",
         character = "mage",
@@ -765,6 +825,9 @@ internal static class Program
         buildNumber = "456",
         operatingSystem = "Windows 11",
         gpu = "RTX 4070",
+        cpu = "Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz",
+        memoryTotalMb = 16384,
+        playtimeMinutes = 2361,
         locale = "zh-CN",
         map = "arena_01",
         character = "mage",

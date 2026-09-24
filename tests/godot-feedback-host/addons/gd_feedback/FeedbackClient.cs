@@ -88,10 +88,10 @@ public partial class FeedbackClient : Node
         return result;
     }
 
-    /// <summary>提交反馈。成功后发 <c>feedback_submitted</c>。</summary>
+    /// <summary>提交反馈。成功后发 <c>feedback_submitted</c>。draft 里没给的环境信息会被自动补上。</summary>
     public async Task<FeedbackResult<PlayerFeedback>> SubmitAsync(PlayerFeedbackDraft draft)
     {
-        FeedbackResult<PlayerFeedback> result = await GetRuntime().SubmitAsync(draft, Token());
+        FeedbackResult<PlayerFeedback> result = await GetRuntime().SubmitAsync(FillEnvironmentInfo(draft), Token());
         PlayerFeedback? feedback = result.Value;
         if (feedback is not null)
         {
@@ -104,7 +104,9 @@ public partial class FeedbackClient : Node
     /// <summary>
     /// GDScript 友好的提交重载：<paramref name="type"/> 取 "Bug" / "Suggestion" / "Other"，
     /// <paramref name="metadata"/> 用 snake_case 键（game_version、build_number、operating_system、
-    /// gpu、locale、map、character）。纯 C# 的 record 无法从 GDScript 构造，所以这里另开一个入口。
+    /// gpu、cpu、memory_total_mb、locale、map、character）。纯 C# 的 record 无法从 GDScript 构造，
+    /// 所以这里另开一个入口。环境信息（operating_system / gpu / cpu / memory_total_mb）不传也行，
+    /// 本插件会自动采集；显式传了的值优先。
     /// </summary>
     public Task<FeedbackResult<PlayerFeedback>> SubmitAsync(
         string? type,
@@ -132,6 +134,8 @@ public partial class FeedbackClient : Node
             Metadata(metadata, "build_number"),
             Metadata(metadata, "operating_system"),
             Metadata(metadata, "gpu"),
+            Metadata(metadata, "cpu"),
+            MetadataInt(metadata, "memory_total_mb"),
             Metadata(metadata, "locale"),
             Metadata(metadata, "map"),
             Metadata(metadata, "character")));
@@ -243,6 +247,9 @@ public partial class FeedbackClient : Node
         { "build_number", item.BuildNumber ?? string.Empty },
         { "operating_system", item.OperatingSystem ?? string.Empty },
         { "gpu", item.Gpu ?? string.Empty },
+        { "cpu", item.Cpu ?? string.Empty },
+        { "memory_total_mb", item.MemoryTotalMb ?? 0 },
+        { "playtime_minutes", item.PlaytimeMinutes ?? 0 },
         { "locale", item.Locale ?? string.Empty },
         { "map", item.Map ?? string.Empty },
         { "character", item.Character ?? string.Empty },
@@ -297,5 +304,115 @@ public partial class FeedbackClient : Node
         }
         string text = metadata[key].AsString();
         return string.IsNullOrWhiteSpace(text) ? null : text;
+    }
+
+    /// <summary>
+    /// 读一个数值型键。GDScript 只有 float 一个数值类型，所以 int 与 float 都要接受；
+    /// 非数值、越界都当"没给"——这个字段越界应当被丢弃，而不是让提交失败。
+    /// </summary>
+    private static int? MetadataInt(Godot.Collections.Dictionary? metadata, string key)
+    {
+        if (metadata is null || !metadata.ContainsKey(key))
+        {
+            return null;
+        }
+
+        Variant value = metadata[key];
+        if (value.VariantType is not (Variant.Type.Int or Variant.Type.Float))
+        {
+            return null;
+        }
+
+        return PlayerFeedbackValidation.NormalizeMemoryTotalMb((int)value.AsDouble());
+    }
+
+    // ---- 环境信息采集（只在这里碰 Godot：核心三件套必须保持引擎无关）----
+
+    /// <summary>
+    /// 用本机采集到的环境信息补上 draft 里没给的字段——<b>宿主显式传的值永远优先</b>。
+    /// 任何一项取不到都只是留空，绝不影响提交。
+    /// </summary>
+    private static PlayerFeedbackDraft FillEnvironmentInfo(PlayerFeedbackDraft draft) => draft with
+    {
+        OperatingSystem = FirstNonEmpty(draft.OperatingSystem, DescribeOperatingSystem()),
+        Gpu = FirstNonEmpty(draft.Gpu, DescribeVideoAdapter()),
+        Cpu = FirstNonEmpty(draft.Cpu, DescribeProcessor()),
+        MemoryTotalMb = draft.MemoryTotalMb ?? ReadTotalMemoryMb(),
+    };
+
+    private static string? FirstNonEmpty(string? preferred, string? fallback) =>
+        !string.IsNullOrWhiteSpace(preferred) ? preferred : (string.IsNullOrWhiteSpace(fallback) ? null : fallback);
+
+    /// <summary>例如 "Windows 11 (build 22631)"；Linux 上再拼发行版名。取不到返回 null。</summary>
+    private static string? DescribeOperatingSystem()
+    {
+        string name = OS.GetName();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        string description = name;
+        string alias = OS.GetVersionAlias();
+        if (!string.IsNullOrWhiteSpace(alias))
+        {
+            description += " " + alias;
+        }
+
+        if (string.Equals(name, "Linux", StringComparison.OrdinalIgnoreCase))
+        {
+            string distribution = OS.GetDistributionName();
+            if (!string.IsNullOrWhiteSpace(distribution))
+            {
+                description += " (" + distribution + ")";
+            }
+        }
+
+        return description;
+    }
+
+    /// <summary>CPU 型号。Godot 只在 Windows / macOS / Linux / iOS 实现它，Android 与 Web 返回空串——此时留空。</summary>
+    private static string? DescribeProcessor()
+    {
+        string name = OS.GetProcessorName();
+        return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+    }
+
+    /// <summary>
+    /// 显卡型号。必须用 RenderingServer：Godot 4.x 的 OS 上没有"显卡名"这个 API
+    /// （OS.get_video_adapter_driver_info() 返回的是驱动名+版本，且文档警告首次调用可能耗时数秒）。
+    /// headless / 服务端构建返回空串，此时留空。
+    /// </summary>
+    private static string? DescribeVideoAdapter()
+    {
+        string name = RenderingServer.GetVideoAdapterName();
+        return string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+    }
+
+    /// <summary>物理内存总量（MB）。Godot 给的 "physical" 是<b>字节</b>；取不到或平台不支持就留空。</summary>
+    private static int? ReadTotalMemoryMb()
+    {
+        try
+        {
+            Godot.Collections.Dictionary info = OS.GetMemoryInfo();
+            if (!info.ContainsKey("physical"))
+            {
+                return null;
+            }
+
+            ulong bytes = info["physical"].AsUInt64();
+            if (bytes == 0)
+            {
+                return null;
+            }
+
+            ulong megabytes = bytes / (1024UL * 1024UL);
+            return megabytes > int.MaxValue ? null : (int)megabytes;
+        }
+        catch (Exception)
+        {
+            // 平台不支持或返回形状变化：留空即可，绝不因为环境信息影响提交。
+            return null;
+        }
     }
 }

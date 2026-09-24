@@ -207,21 +207,31 @@ public sealed class FeedbackRuntime : IDisposable
             return FeedbackResult<PlayerFeedback>.Fail(ValidationFailure(validationError));
         }
 
+        // 自动采集字段（cpu / memoryTotalMb）只做归一化，不做致命校验：越界就丢弃，
+        // 绝不因为玩家的机器信息让整条反馈提交失败。规则与服务端一致。
+        PlayerFeedbackDraft normalized = draft with
+        {
+            Cpu = PlayerFeedbackValidation.NormalizeCpu(draft.Cpu),
+            MemoryTotalMb = PlayerFeedbackValidation.NormalizeMemoryTotalMb(draft.MemoryTotalMb),
+        };
+
         FeedbackResult<HttpResponseMessage> sent = await SendAuthorizedAsync(
             accessToken => JsonRequest(
                 HttpMethod.Post,
                 "api/feedback",
                 new CreateFeedbackRequest(
-                    draft.Type.ToString(),
-                    draft.Title,
-                    draft.Content,
-                    draft.GameVersion,
-                    draft.BuildNumber,
-                    draft.OperatingSystem,
-                    draft.Gpu,
-                    draft.Locale,
-                    draft.Map,
-                    draft.Character),
+                    normalized.Type.ToString(),
+                    normalized.Title,
+                    normalized.Content,
+                    normalized.GameVersion,
+                    normalized.BuildNumber,
+                    normalized.OperatingSystem,
+                    normalized.Gpu,
+                    normalized.Cpu,
+                    normalized.MemoryTotalMb,
+                    normalized.Locale,
+                    normalized.Map,
+                    normalized.Character),
                 accessToken),
             cancellationToken);
 
@@ -549,6 +559,8 @@ public sealed class FeedbackRuntime : IDisposable
         string? BuildNumber,
         string? OperatingSystem,
         string? Gpu,
+        string? Cpu,
+        int? MemoryTotalMb,
         string? Locale,
         string? Map,
         string? Character);

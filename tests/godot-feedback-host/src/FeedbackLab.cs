@@ -296,11 +296,11 @@ public partial class FeedbackLab : Control
 
     private void SubmitFeedback()
     {
+        // 只填游戏语义：环境信息（OS / GPU / CPU / 内存）由插件自动采集，宿主不再手写。
         Godot.Collections.Dictionary metadata = new()
         {
             { "game_version", "0.1.0-lab" },
             { "build_number", "lab" },
-            { "operating_system", OS.GetName() },
             { "locale", OS.GetLocale() },
             { "map", _map.Text },
             { "character", _character.Text },

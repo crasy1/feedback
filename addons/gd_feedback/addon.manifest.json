@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "gd_feedback",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "godotVersion": "4.7.2",
   "targetFramework": "net10.0",
   "archiveRoot": "addons/gd_feedback/",

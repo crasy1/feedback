@@ -1,4 +1,4 @@
-# GD Feedback 1.0.0
+# GD Feedback 1.1.0
 
 Steam 玩家反馈客户端（Godot 4.7 / .NET 10 插件）：玩家用 Steam 票据登录，提交反馈与评论，读取自己的反馈历史。
 它对接的是 [Steam Game Feedback System](../../README.md) 的玩家 API（契约见 [docs/specs/player-api.md](../../docs/specs/player-api.md)）。
@@ -7,7 +7,7 @@ Steam 玩家反馈客户端（Godot 4.7 / .NET 10 插件）：玩家用 Steam �
 
 - **零宿主依赖**：`dependencies` 为空，不引用任何 Steam 绑定，不引用任何 Godot 之外的包。
 - **核心引擎无关**：`FeedbackRuntime` / `FeedbackContracts` / `FeedbackAbstractions` 不含任何 `using Godot`，可用纯 .NET 测试驱动。
-- **不自作主张**：不猜地图/角色等游戏语义（由调用方填），不打印票据与访问令牌，不在未开启调试开关时走调试登录。
+- **不自作主张**：不猜地图/角色等游戏语义（由调用方填），不打印票据与访问令牌，不在未开启调试开关时走调试登录。唯一的例外是**环境信息**（OS / GPU / CPU / 内存）：它会自动采集并作为默认值上报，宿主显式传的值优先，见下文「环境信息自动采集」。
 
 ## 支持矩阵
 
@@ -73,11 +73,11 @@ _ = feedback.SubmitAsync(new PlayerFeedbackDraft(
     "1v1 模式加载 arena_01 必现崩溃，普通对局不受影响。",
     GameVersion: "1.2.3",
     BuildNumber: "456",
-    OperatingSystem: "Windows 11",
-    Gpu: "RTX 4070",
     Locale: "zh-CN",
     Map: "arena_01",
     Character: "mage"));
+// 操作系统 / 显卡 / CPU / 内存不用手填：插件会自动采集（见「环境信息自动采集」）。
+// 传了就用你传的，没传才用采集值。
 ```
 
 GDScript 调用（**只能等信号，不能 await C# 的 Task** —— 这是 Godot 的既定规则）：
@@ -112,6 +112,25 @@ func submit_and_wait() -> void:
     feedback.submit_async("Bug", "标题", "正文")
     await feedback.feedback_submitted     # 也可以 await feedback.feedback_failed
 ```
+
+## 环境信息自动采集
+
+提交反馈时，插件会补上调用方没给的机器信息，作为排查依据：
+
+| 字段 | 来源 | 取不到时 |
+|---|---|---|
+| `operating_system` | `OS.get_name()` + `OS.get_version_alias()`；Linux 再拼发行版名 | 留空 |
+| `gpu` | `RenderingServer.get_video_adapter_name()` | 留空（headless / 服务端构建必为空） |
+| `cpu` | `OS.get_processor_name()` | 留空（Android 与 Web 上 Godot 没有实现） |
+| `memory_total_mb` | `OS.get_memory_info()` 的 `physical`（字节换算成 MB） | 留空 |
+
+三条规则：
+
+1. **宿主显式传的值优先**，插件只补空缺。想覆盖就照常传 `OperatingSystem` / `Gpu` / `Cpu` / `MemoryTotalMb`（GDScript 侧是 `operating_system` / `gpu` / `cpu` / `memory_total_mb` 键）。
+2. **越界只会被丢弃，不会让提交失败**：CPU 超过 120 字符、内存不在 1..4194304 MB 内，就直接不带这个字段。玩家既没有输入它们、也无法修正它们；服务端同样是丢弃而不是报 400。
+3. **没有开关，也无法关闭**：传空值会被当成"没给"，一样走采集。这是刻意的取舍——环境信息是排查 bug 的必要上下文，默认行为才会真的有人上报。
+
+> `gpu` 走 `RenderingServer` 而不是 `OS`：Godot 4.x 的 `OS` 上并没有"显卡名"这个 API，只有 `OS.get_video_adapter_driver_info()`（返回驱动名 + 版本，而且文档警告首次调用可能耗时数秒），所以不用它。
 
 ## 配置
 
@@ -167,8 +186,11 @@ void                                        Configure(FeedbackConfig config = nu
 | `feedback_failed` | `(int status_code, string error_code, string message, bool retryable)` |
 
 列表项 / 详情的字典键（snake_case）：`id`、`type`、`title`、`content`、`status`、`game_version`、
-`build_number`、`operating_system`、`gpu`、`locale`、`map`、`character`、`created_at`（ISO 8601 UTC）；
+`build_number`、`operating_system`、`gpu`、`cpu`、`memory_total_mb`、`playtime_minutes`、`locale`、`map`、
+`character`、`created_at`（ISO 8601 UTC）；
 详情另带 `comments`（每项为 `id`、`author_type`、`content`、`created_at`）。
+
+`memory_total_mb` 与 `playtime_minutes` 缺失时为 `0`（`playtime_minutes` 由服务端填写，客户端只读）。
 
 ## 错误码
 
@@ -213,6 +235,7 @@ void                                        Configure(FeedbackConfig config = nu
 | 反馈表单 UI、本地化、错误码到文案的映射 | 宿主 |
 | 传输、JSON、本地校验、令牌缓存、重试与错误码 | 本插件 |
 | Godot 适配器（`Node`、信号、`CallDeferred` 回主线程） | 本插件 |
+| 环境信息采集（OS / GPU / CPU / 内存）与默认值 | 本插件（宿主显式传的值优先） |
 
 ## 验证
 

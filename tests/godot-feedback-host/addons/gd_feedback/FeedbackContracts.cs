@@ -111,6 +111,15 @@ public interface IPlayerFeedbackView
 
     string? Gpu { get; }
 
+    /// <summary>CPU 型号；由客户端自动采集，属咨询性数据，不可信。</summary>
+    string? Cpu { get; }
+
+    /// <summary>物理内存总量（MB）；由客户端自动采集，属咨询性数据，不可信。</summary>
+    int? MemoryTotalMb { get; }
+
+    /// <summary>提交这条反馈时该玩家的累计游玩时长（分钟）；由服务端从 Steam 取后快照，取不到为 null。</summary>
+    int? PlaytimeMinutes { get; }
+
     string? Locale { get; }
 
     string? Map { get; }
@@ -131,6 +140,9 @@ public sealed record PlayerFeedback(
     string? BuildNumber,
     string? OperatingSystem,
     string? Gpu,
+    string? Cpu,
+    int? MemoryTotalMb,
+    int? PlaytimeMinutes,
     string? Locale,
     string? Map,
     string? Character,
@@ -150,6 +162,9 @@ public sealed record PlayerFeedbackDetail(
     string? BuildNumber,
     string? OperatingSystem,
     string? Gpu,
+    string? Cpu,
+    int? MemoryTotalMb,
+    int? PlaytimeMinutes,
     string? Locale,
     string? Map,
     string? Character,
@@ -170,6 +185,8 @@ public sealed record PlayerFeedbackDraft(
     string? BuildNumber = null,
     string? OperatingSystem = null,
     string? Gpu = null,
+    string? Cpu = null,
+    int? MemoryTotalMb = null,
     string? Locale = null,
     string? Map = null,
     string? Character = null);
@@ -187,9 +204,33 @@ public static class PlayerFeedbackValidation
     public const int BuildNumberMaxLength = 64;
     public const int OperatingSystemMaxLength = 100;
     public const int GpuMaxLength = 100;
+    public const int CpuMaxLength = 120;
     public const int LocaleMaxLength = 32;
     public const int MapMaxLength = 100;
     public const int CharacterMaxLength = 100;
+
+    /// <summary>物理内存总量上限（MB）= 4 TiB，与服务端一致。</summary>
+    public const int MemoryMaxMb = 4 * 1024 * 1024;
+
+    /// <summary>
+    /// 归一化自动采集的 CPU 型号。
+    /// <b>刻意不放进 <see cref="Validate"/></b>：这个字段玩家既没有输入、也无法修正，
+    /// 所以越界应当是"丢弃"而不是让整条反馈提交失败——与服务端的规则一致。
+    /// </summary>
+    public static string? NormalizeCpu(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        string trimmed = value.Trim();
+        return trimmed.Length > CpuMaxLength ? null : trimmed;
+    }
+
+    /// <summary>归一化自动采集的内存总量（MB）；越界一律丢弃，理由同 <see cref="NormalizeCpu"/>。</summary>
+    public static int? NormalizeMemoryTotalMb(int? value) =>
+        value is int megabytes && megabytes > 0 && megabytes <= MemoryMaxMb ? megabytes : null;
 
     /// <summary>校验草稿；返回错误消息，null 表示通过。</summary>
     public static string? Validate(PlayerFeedbackDraft draft)
