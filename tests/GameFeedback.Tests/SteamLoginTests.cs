@@ -60,6 +60,51 @@ public sealed class SteamLoginTests(IntegrationTestFixture fixture)
     }
 
     [Fact]
+    public async Task Real_world_ticket_length_is_accepted()
+    {
+        // Steam 的 Web API 票据最大 2560 字节，十六进制编码后是 5120 字符（真机实测就是这个长度）。
+        // 早先的上限 4096 会把真实玩家挡在登录门外，这条测试盯着它不要退回去。
+        const string steamId = "76561198000000099";
+        var (factory, steam) = CreateSteamFactory();
+        steam.EnqueueTicketResponse(FakeSteamHandler.TicketOk(steamId));
+        steam.SetProfileResponse(FakeSteamHandler.Profile("LongTicket", null));
+
+        var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = new string('a', 5120) });
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Rejected_ticket_reports_the_steam_ticket_rejected_code()
+    {
+        // 401 的 ProblemDetails 带稳定 code：客户端据此区分"票不对"（不可重试）与"没验成"（可重试）。
+        var (factory, steam) = CreateSteamFactory();
+        steam.EnqueueTicketResponse(FakeSteamHandler.TicketRejected());
+
+        var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "bad-ticket" });
+
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("steam_ticket_rejected", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Unreachable_steam_reports_the_steam_unavailable_code()
+    {
+        var (factory, steam) = CreateSteamFactory();
+        steam.EnqueueTicketResponse(FakeSteamHandler.SteamServerError());
+
+        var client = factory.CreateClient();
+        var response = await client.PostAsJsonAsync("/api/auth/steam", new { ticket = "some-ticket" });
+
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("steam_unavailable", body.GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task Invalid_ticket_is_rejected_and_creates_no_player()
     {
         var (factory, steam) = CreateSteamFactory();

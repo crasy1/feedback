@@ -18,6 +18,15 @@ Input:
 
 Return a local access token plus only client-required player data.
 
+A failed login answers `401` with `ProblemDetails` and a stable extension member `code`:
+
+```text
+steam_ticket_rejected   Steam rejected the ticket (invalid, expired, or appid/identity mismatch)
+steam_unavailable       Steam could not be consulted (network, timeout, or server-side Steam configuration)
+```
+
+Clients must treat the first as "this ticket is not usable" and the second as retryable: the ticket itself may be fine, and only the server's ability to ask Steam failed. A malformed or missing ticket answers `400`.
+
 ## Create feedback
 
 ```http
@@ -78,6 +87,7 @@ Do not expose admin operations through player endpoints.
 `type` accepts only the names `Bug`, `Suggestion`, and `Other` (case-insensitive). Numeric enum strings and comma-separated combinations are rejected with 400.
 
 ```text
+Ticket:       1–8192 chars (hex; Steam's web API ticket is up to 2560 bytes → 5120 hex chars)
 Title:        1–200 chars
 Content:      1–10,000 chars
 Comment:      1–5,000 chars

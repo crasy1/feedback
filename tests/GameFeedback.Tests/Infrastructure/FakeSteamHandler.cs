@@ -93,7 +93,8 @@ public sealed class FakeSteamHandler : HttpMessageHandler
 
     public static Func<HttpResponseMessage> Payload(string json) => () => JsonResponse(json);
 
-    public static Func<HttpResponseMessage> Profile(string steamName, string avatarUrl) => () => JsonResponse(
+    /// <summary>Steam 的 avatarfull 在资料不可见时确实可能是 null，所以这里允许留空。</summary>
+    public static Func<HttpResponseMessage> Profile(string steamName, string? avatarUrl) => () => JsonResponse(
         JsonSerializer.Serialize(new
         {
             response = new

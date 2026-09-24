@@ -9,7 +9,17 @@ namespace GameFeedback.Api;
 
 public static class AuthEndpoints
 {
-    private const int MaxTicketLength = 4096;
+    /// <summary>
+    /// 票据长度上限（十六进制字符）。Steam 的 Web API 票据最大 2560 字节，十六进制编码后是 5120 字符，
+    /// 所以 4096 会把真实玩家的票据直接挡掉（真机实测：5120）。这里给到 8192（= 4096 字节）留出余量，
+    /// 同时仍然是一个有界值，因为票据会被转发到 Steam 的查询串里。
+    /// </summary>
+    private const int MaxTicketLength = 8192;
+
+    /// <summary>验票失败的两类稳定代码，放在 ProblemDetails 的扩展成员 <c>code</c> 里，客户端按它分支。</summary>
+    private const string SteamTicketRejectedCode = "steam_ticket_rejected";
+
+    private const string SteamUnavailableCode = "steam_unavailable";
 
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
@@ -52,12 +62,24 @@ public static class AuthEndpoints
                     return Results.Problem(statusCode: 400, title: "票据过长");
                 }
 
-                // SteamID 只能来自服务端验证结果，fail closed。
-                steamId = await steamAuth.AuthenticateTicketAsync(ticket, cancellationToken);
-                if (steamId is null)
+                // SteamID 只能来自服务端验证结果，fail closed。失败也分两类上报：
+                // "票被否"（重试无用）与"没验成"（网络/配置问题，可重试），各自带稳定的 code。
+                SteamTicketVerification verification = await steamAuth.AuthenticateTicketAsync(ticket, cancellationToken);
+                if (verification.SteamId is null)
                 {
-                    return Results.Unauthorized();
+                    return verification.Failure == SteamTicketFailure.SteamUnavailable
+                        ? Results.Problem(
+                            statusCode: StatusCodes.Status401Unauthorized,
+                            title: "Steam 验票服务不可用",
+                            detail: "Steam 没有给出结论（网络、超时，或本服务的 Steam:ApiKey / Steam:AppId 配置问题），稍后可以重试。",
+                            extensions: new Dictionary<string, object?> { ["code"] = SteamUnavailableCode })
+                        : Results.Problem(
+                            statusCode: StatusCodes.Status401Unauthorized,
+                            title: "Steam 验票未通过",
+                            detail: "票据无效、已过期，或与服务端的 appid/identity 不匹配。",
+                            extensions: new Dictionary<string, object?> { ["code"] = SteamTicketRejectedCode });
                 }
+                steamId = verification.SteamId;
             }
 
             var (steamName, avatarUrl) = await steamAuth.GetPlayerSummaryAsync(steamId, cancellationToken);

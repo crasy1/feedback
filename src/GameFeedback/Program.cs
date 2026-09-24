@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using System.Text.Json.Nodes;
@@ -148,6 +149,32 @@ static string GetPlayerPartitionKey(HttpContext context) =>
     ?? context.Connection.RemoteIpAddress?.ToString()
     ?? "unknown";
 
+/// <summary>Steam 凭据没配好就大声提醒：这种配置下真实票据登录必然失败（fail closed）。</summary>
+static void WarnAboutPlaceholderSteamConfiguration(WebApplication application)
+{
+    SteamOptions steam = application.Services.GetRequiredService<IOptions<SteamOptions>>().Value;
+    bool apiKeyMissing = IsPlaceholderSteamValue(steam.ApiKey);
+    bool appIdMissing = IsPlaceholderSteamValue(steam.AppId);
+    if (!apiKeyMissing && !appIdMissing)
+    {
+        return;
+    }
+
+    application.Logger.LogWarning(
+        "Steam 凭据看起来是占位值（Steam:ApiKey={ApiKeyState} Steam:AppId={AppIdState}）：真实票据登录会以 " +
+        "401 steam_unavailable 失败。只有开启 Steam:DebugSkipTicketValidation 的调试登录仍可用。",
+        apiKeyMissing ? "占位" : "已设置",
+        appIdMissing ? "占位" : "已设置");
+}
+
+/// <summary>空值、compose 的 unset 默认值、示例里的尖括号占位都算"没配"。</summary>
+static bool IsPlaceholderSteamValue(string? value) =>
+    string.IsNullOrWhiteSpace(value)
+    || string.Equals(value, "unset", StringComparison.OrdinalIgnoreCase)
+    || string.Equals(value, "change-me", StringComparison.OrdinalIgnoreCase)
+    || value.Contains('<', StringComparison.Ordinal)
+    || value.Contains("your-", StringComparison.OrdinalIgnoreCase);
+
 // 保留框架的回环信任默认值，其他反向代理必须显式配置。
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -278,6 +305,10 @@ if (enableSwaggerDocs)
 }
 
 var app = builder.Build();
+
+// Steam 凭据是占位值（compose 的 ${VAR:-unset} 默认值、示例模板）时，真实票据登录会全部 401。
+// 启动就把话说清楚，别让人对着客户端的 ticket/verification 错误码猜。
+WarnAboutPlaceholderSteamConfiguration(app);
 
 // 必须最先执行，限流按 IP 分区才能取到真实客户端地址。
 app.UseForwardedHeaders();
