@@ -24,6 +24,14 @@ _Avoid_: Reply, message, note
 Which side wrote a Feedback Comment: the owning Player or an Admin.
 _Avoid_: Role, poster
 
+**Playtime**:
+The time a Player has accumulated in the game, as reported by Steam and captured by the server at the moment a Feedback is submitted. A snapshot attached to one Feedback, not a live value; when Steam cannot supply it the value is left empty rather than estimated.
+_Avoid_: play hours, session time, 在线时长 (the length of a single game session is a different measurement)
+
+**Hardware Info**:
+Client-reported details of the machine a Feedback was submitted from: CPU, GPU, and total memory. Advisory context only — it comes from the Feedback Client, is never trusted, is never used for authorization, and never identifies a Player on its own.
+_Avoid_: system info, machine spec, 配置信息
+
 **Steam Ticket**:
 A short-lived token the game client obtains from Steam and sends to the server; the server verifies it with Steam to authenticate a Player.
 _Avoid_: Login session, auth code

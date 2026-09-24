@@ -27,6 +27,7 @@ GameFeedback/
 │   └── FeedbackStatus.cs
 ├── Services/
 │   ├── SteamAuthService.cs
+│   ├── SteamPlaytimeService.cs
 │   ├── TokenService.cs
 │   └── FeedbackService.cs
 ├── Security/
@@ -44,6 +45,8 @@ GameFeedback/
 - `Components`: Blazor admin UI.
 
 Do not put substantial business logic directly in Minimal API handlers or Razor components.
+
+`SteamPlaytimeService` owns the Steam playtime lookup and is best-effort by design (ADR-0006): it never throws at the caller, and the endpoint passes its result into `FeedbackService.CreateAsync` so that the persistence service keeps depending only on `AppDbContext`.
 
 ## Database
 

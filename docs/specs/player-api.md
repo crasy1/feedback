@@ -45,6 +45,8 @@ Input (metadata fields are client-supplied and optional; the server only validat
   "buildNumber": "123",
   "operatingSystem": "Windows 11",
   "gpu": "RTX 4070",
+  "cpu": "Intel(R) Core(TM) i7-6700K CPU @ 4.00GHz",
+  "memoryTotalMb": 16384,
   "locale": "zh-CN",
   "map": "arena_01",
   "character": "mage"
@@ -52,6 +54,18 @@ Input (metadata fields are client-supplied and optional; the server only validat
 ```
 
 The SteamID comes from authentication, never the request body.
+
+`cpu` and `memoryTotalMb` are normally collected automatically by the Feedback Client. They are **advisory context**: the server bounds them, and an out-of-range value is **discarded rather than rejected** — the Player neither typed them nor can fix them, so a `400` would only cost them the Feedback they wrote. Every other metadata field keeps the "too long → `400`" behaviour.
+
+Every Feedback response (`POST` result, `/mine`, `/{id}`) additionally carries three read-only fields:
+
+```text
+cpu              string?   echoed back from the request (or null when discarded)
+memoryTotalMb    int?      echoed back from the request (or null when discarded)
+playtimeMinutes  int?      the Player's accumulated minutes in this game
+```
+
+`playtimeMinutes` is **filled in by the server**: it is looked up from Steam at submission time and snapshotted onto the Feedback. A client-supplied `playtimeMinutes` is ignored — do not send it, and do not treat it as an input field. It is `null` whenever Steam cannot supply it (private game details, an app not owned in the retail sense, a debug-login SteamID, or a Steam outage); `0` is a real value meaning "owns it, never played".
 
 ## List own feedback
 
@@ -93,6 +107,8 @@ Content:      1–10,000 chars
 Comment:      1–5,000 chars
 GameVersion:  <= 64 chars
 BuildNumber:  <= 64 chars
+Cpu:          <= 120 chars (auto-collected; over-long is discarded, not rejected)
+MemoryTotalMb: 1 .. 4,194,304 (auto-collected; out of range is discarded, not rejected)
 Metadata:     bounded to sensible lengths
 ```
 

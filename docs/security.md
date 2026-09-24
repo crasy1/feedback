@@ -99,6 +99,15 @@ trusted Steam authentication result
 
 Use `IHttpClientFactory`. Configure timeout, API key, AppID and identity through strongly typed options. Do not create a new `HttpClient` for each request.
 
+## Steam playtime lookup
+
+`POST /api/feedback` additionally asks Steam for the authenticated Player's accumulated playtime in this app (`IPlayerService/GetSingleGamePlaytime/v1`) and snapshots the result onto that Feedback. Rationale and rejected alternatives: ADR-0006.
+
+- The `steamid` sent to Steam comes from the authenticated principal; it is never taken from request data.
+- The lookup is **best effort and authoritative for nothing**: it has a 3-second budget, and any failure simply leaves the column `null`. It can never fail a submission and never returns an error to the Player.
+- The response body is logged (bounded, and free of credentials) only when the expected field is missing, so a Steam-side shape change is visible rather than indistinguishable from a private profile.
+- Hardware Info (`cpu`, `memoryTotalMb`) is client-supplied and treated as untrusted advisory context: length/range bounded, out-of-range values discarded rather than rejected, never used for authorization, and never sufficient to identify a Player on its own. `playtimeMinutes` is not accepted from clients at all.
+
 ## JWT design
 
 Use short-lived local player access tokens: 24-hour expiry, HS256 signed with a 256-bit key from `Jwt__SigningKey`. Recommended subject:
