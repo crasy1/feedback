@@ -43,6 +43,26 @@ public sealed class UnavailableGameAppIdProvider : IGameAppIdProvider
     public string? GetSteamAppId() => null;
 }
 
+/// <summary>
+/// 把配置里的 AppID 与宿主注入的来源组合起来：<paramref name="configuredAppId"/> 填了就以它为准，
+/// 留空才问 <paramref name="fallback"/>。
+/// <para>
+/// 顺序是刻意的：配置来自宿主的配置资源（<c>feedback_config.tres</c>，或项目根下的短名
+/// <c>feedback.tres</c>），是项目里看得见、点得动的一份设置——
+/// 纯 GDScript 的宿主也能用它，不必为了一个常量去写 C# 实现；而宿主注入的实现给的是
+/// "进程此刻运行在哪个 AppID 之下"，只有在没填配置时才需要它。
+/// </para>
+/// </summary>
+public sealed class ConfiguredGameAppIdProvider(string? configuredAppId, IGameAppIdProvider fallback) : IGameAppIdProvider
+{
+    private readonly string? _configuredAppId =
+        string.IsNullOrWhiteSpace(configuredAppId) ? null : configuredAppId.Trim();
+
+    private readonly IGameAppIdProvider _fallback = fallback ?? throw new ArgumentNullException(nameof(fallback));
+
+    public string? GetSteamAppId() => _configuredAppId ?? _fallback.GetSteamAppId();
+}
+
 /// <summary>访问令牌缓存；默认实现只在内存里保存。</summary>
 public interface ITokenStore
 {

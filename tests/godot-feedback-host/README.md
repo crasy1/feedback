@@ -13,9 +13,12 @@
    # 或 python scripts/run_local.py --docker（同一条命令）
    ```
 
-   本工程的 BaseUrl 默认是 `http://127.0.0.1:3000`——**只填服务地址**：玩家 API 的 `/g/{appId}` 前缀由
-   `LabAppIdProvider` 提供的 Steam AppID（读的就是 steamworks 那份 `SteamConfig.AppId`）自动补全，
-   所以接入时不需要手抄任何标识字符串。点「健康检查」可以先确认 `/health` 通了。
+   本工程的接入配置全在 [`feedback.tres`](feedback.tres)（工程根，`FeedbackConfig` 资源）：
+   `BaseUrl` 是你要联调的那套服务（本工程当前指向 `https://feedback.jwt.dpdns.org`，本机 compose 栈则是
+   `http://127.0.0.1:3000`）——**只填服务地址**；`SteamAppId` 是 `1910980`，
+   玩家 API 的 `/g/{appId}` 前缀由插件按它自动补全，所以接入时不需要手抄标识字符串。
+   短名 `feedback.tres` 与 `feedback_config.tres` 插件都认（两个都在时长名优先，启动日志会打印生效的那一份）。
+   点「健康检查」可以先确认 `/health` 通了。界面上的 BaseUrl 输入框只覆盖本次运行，不会回写 `.tres`。
 1. Godot 4.7.2 **.NET** 版打开本目录（`tests/godot-feedback-host/`）。
 2. 构建 C#（编辑器右上角会提示，或命令行 `dotnet build tests/godot-feedback-host/GdFeedbackHost.csproj`）。
 3. Project Settings → Plugins，启用 **GD Feedback**（它会注册 `FeedbackClient` 自定义节点，并把 `GdFeedback` 注册为 Autoload）。想用真实 Steam 票据，再启用 **steamworks**（它会把 `SteamManager` 等注册为 Autoload 并负责 Steam 初始化）。
@@ -52,10 +55,11 @@
 godot-mono.console.exe --headless --path tests/godot-feedback-host res://Main.tscn -- --lab-selfcheck
 ```
 
-它分两阶段，成功后打印 `GD_FEEDBACK_LAB PASS` 并以 0 退出：
+它分三阶段，成功后打印 `GD_FEEDBACK_LAB PASS` 并以 0 退出：
 
+0. 读工程根的配置资源（`feedback.tres`）→ 断言它真的被加载、且 `SteamAppId` 是个合法 AppID（证明"AppID 由配置提供"这条接线在真实宿主工程里通着）；
 1. 空标题提交 → 断言拿到 `validation_failed`（证明信号经 `CallDeferred` 回到主线程后确实发出来了）；
-2. 打开调试登录、把 BaseUrl 指到 `http://127.0.0.1:1` → 断言拿到 `transport_failed` 或 `server_error`（证明 `System.Net.Http` 在 Godot 运行时里真的能发请求，且失败被正确分类）。
+2. 打开调试登录、把 BaseUrl 指到 `http://127.0.0.1:1` → 断言拿到 `transport_failed` 或 `server_error`（证明 `System.Net.Http` 在 Godot 运行时里真的能发请求，且失败被正确分类）。这一步**保留 `.tres` 里的 AppID**，所以路径确实是 `/g/{appId}/api/...`；AppID 非法的话它会以 `invalid_configuration` 失败，而不是走到网络。
 
 > 注意用 `godot-mono.**console**.exe`：GUI 版可执行文件不产生 stdout。
 
@@ -77,10 +81,17 @@ Godot 首次导入会自己生成 `*.cs.uid`、`*.import` 和 `.godot/`；这些
 它在真实宿主里的两个影响，值得知道：
 
 - **构建会有 49 条告警**（CS8618/CS8625/CS8602…，全部来自它的代码），所以本工程的 `GdFeedbackHost.csproj` **刻意不设** `TreatWarningsAsErrors` —— 真实宿主 `arena.csproj` 同样不设。`gd_feedback` 自己的严格门禁在 `verify.py` 第 4 阶段（干净宿主 fixture + `TreatWarningsAsErrors=true` + 0 warning），不在这个工程里。
-- **Steam 初始化归它管**：启用插件后才会有 `SteamManager` autoload 去 `SteamClient.Init`。它的 `SteamConfig.tres` 默认 AppId 是 **480**（Spacewar 测试 App）；要跟真实游戏对齐，得改成正式 AppId，并且**在后台「游戏」页把该游戏的 Steam AppID 配成同一个值**——AppID 已经不在环境变量里了，两边不一致就会验票失败。
+- **Steam 初始化归它管**：启用插件后才会有 `SteamManager` autoload 去 `SteamClient.Init`。它的 `SteamConfig.tres` AppId 现在是 **1910980**（与根部的 `feedback.tres` 对齐）；要跟真实游戏对齐，得改成正式 AppId，并且**在后台「游戏」页把该游戏的 Steam AppID 配成同一个值**——AppID 已经不在环境变量里了，两边不一致就会验票失败。
+
+> **AppID 在这个工程里有两个落脚点**，这是刻意的演示、也是接入时要警惕的成本：steamworks 的
+> `SteamConfig.tres`（Steam 初始化用）与根部的 `feedback.tres`（玩家 API 的 `/g/{appId}` 用）。
+> `FeedbackClient` 取的是后者。真实项目里若不想维护两份，就把配置里的 `SteamAppId`
+> 留空、改用 `IGameAppIdProvider` 读同一个真相（`addons/gd_feedback/README.md` 里有示例）。
+> 不一致时的表现是可诊断的：登录端点回 `game_not_found`（该 AppID 在后台没有对应的游戏），
+> 或验票被 Steam 拒（票据是给另一个 AppID 出的）。
 
 ## 这个工程不做什么
 
-- 不替代插件自带的验证门禁：`python addons/gd_feedback/tests/verify.py` 才是发布门禁（离线、严格构建、4 个阶段；仅第 3 阶段的干净宿主 harness 一段就有 116 项检查）；本工程是它的**引擎内补充**，也是给人点着用的台子。
+- 不替代插件自带的验证门禁：`python addons/gd_feedback/tests/verify.py` 才是发布门禁（离线、严格构建、4 个阶段；仅第 3 阶段的干净宿主 harness 一段就有 126 项检查）；本工程是它的**引擎内补充**，也是给人点着用的台子。
 - 不给 `gd_feedback` 引入 Steam 依赖。插件只依赖注入进来的 `ITicketProvider`；**出票这一段是本工程（宿主）自己实现的**（`src/LabTicketProvider.cs`），插件侧至今零 Steam 引用——`verify.py` 第 2 阶段会一直盯着这条不变量。
 - 不包含真实密钥、不写入访问令牌（`CacheAccessToken = false`）；票据与访问令牌都不会进日志（只记长度）。

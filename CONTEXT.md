@@ -49,5 +49,5 @@ The invariant that a Player can only read and comment on their own Feedback with
 _Avoid_: Permission, visibility
 
 **Feedback Client**:
-The in-game Godot client that authenticates a Player and submits Feedback and Feedback Comments. It ships as an addon in this repository and is installed into a game project by copying it there. It is pointed at the feedback service and supplies the Steam AppID it is running as, which is how it addresses that Game. The client never holds a Game identifier of its own invention.
+The in-game Godot client that authenticates a Player and submits Feedback and Feedback Comments. It ships as an addon in this repository and is installed into a game project by copying it there. It is pointed at the feedback service and addresses a Game by that Game's Steam AppID — taken from the client's own config resource (`SteamAppId` in `feedback_config.tres` or its short alias `feedback.tres`) or, when the AppID is only known at runtime, from the AppID the host injects. The client never holds a Game identifier of its own invention.
 _Avoid_: SDK, client library, plugin wrapper

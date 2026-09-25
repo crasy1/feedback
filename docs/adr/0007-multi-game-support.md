@@ -93,3 +93,21 @@ The invariants the original decision protected are intact. An AppID in the path 
 - `games.SteamAppId` uniqueness is unchanged, and the `Restrict` foreign keys (`feedbacks.GameId`, `players.GameId`, `games.CredentialId`) are unchanged.
 - The upgrade placeholder Game is unreachable by every client until an Admin fills in its AppID, and the admin UI forces that on edit.
 - [ADR-0008](0008-steam-configuration-in-the-database.md) is unchanged except where it said a Game with a `NULL` `SteamAppId` answers `401 steam_unavailable`; it now cannot be reached at all.
+
+## Revision 2 (plugin 1.4.0): the AppID may also come from the client's own config file
+
+**The "host injects the AppID" decision stands; it is no longer the only source.** What changed is where a *host that does not want to write glue code* can put the value.
+
+### What changed
+
+- **`FeedbackConfig` gained an exported `SteamAppId`**, so it is a field of the host's config resource — a setting an integrator edits in the Inspector, not C#. `BaseUrl` was already there; the two now sit side by side, which is the whole of what a host has to configure to point a game at the service. The resource is found at `res://feedback_config.tres` (documented name) or the project-root short name `res://feedback.tres`; both are accepted, and the long name wins when a project somehow has both. `FeedbackConfig.LoadedFromPath` records which one was read.
+- **Source order: configured `SteamAppId` → injected `IGameAppIdProvider` → `BaseUrl` verbatim.** A non-blank configured value wins; a blank one (whitespace counts as blank) falls through to the provider exactly as before. The composition is `ConfiguredGameAppIdProvider` (`addons/gd_feedback/FeedbackAbstractions.cs`), engine-free and covered by the offline harness; `FeedbackClient` builds it from the loaded config.
+- **Bad values still fail closed, and now they fail closed from either source.** A configured AppID that is not digits-only, longer than 10 characters, or all zeros produces the client's own `invalid_configuration` **before any request**, exactly as a bad injected value always did (`FeedbackRuntime.ValidateConfiguration`).
+
+### Why
+
+The provider is the better answer when the AppID is knowable at runtime, and it remains what this ADR recommends for a shipping build — the "a shipped build must not be stranded by a stale copied identifier" argument below is untouched by this revision, and a value written into a `.tres` is still a copied identifier. But the interface is a **C#** interface: a host driven from GDScript cannot implement it, so before this revision a GDScript-first project had to add a C# class returning a constant just to be addressable. That is a lot of ceremony for a number the project already knows. Making it a config field gives that host a one-line answer without weakening the model.
+
+### Trade-off, stated plainly
+
+Two sources can disagree, and the configured one wins. A host that keeps `SteamAppId` in its config resource *and* injects a provider that reads the AppID the process actually runs under will address the configured AppID — correct only as long as the two agree. The failure is diagnosable but indirect: the login endpoint answers `404 game_not_found` (no Game carries that AppID) or Steam rejects the ticket (issued under a different AppID). A host in that position should leave `SteamAppId` blank and let the provider be the single source of truth; `addons/gd_feedback/README.md` and `tests/godot-feedback-host/README.md` both say so at the point of use.

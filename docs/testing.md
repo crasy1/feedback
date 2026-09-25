@@ -67,7 +67,13 @@ runs before any request, that a missing Steam ticket fails closed, that the acce
 re-issued once after a 401, that a host-provided AppID completes the `/g/{appId}` path
 (`/g/1910980/api/auth/steam`), that a host value which is not a numeric AppID (digits only, at most 10
 characters — a slug, by mistake) fails closed with `invalid_configuration` and sends no request, and that no
-log line ever contains the ticket or the access token. It needs no
+log line ever contains the ticket or the access token. It also pins the **AppID source order**: a
+`SteamAppId` supplied by the host's config resource (`feedback_config.tres`, or its short alias
+`feedback.tres`) wins over the injected `IGameAppIdProvider`,
+and a blank configured value falls back to the provider rather than meaning "empty AppID". The in-engine
+probe additionally asserts both sources in the engine: a bad configured value fails locally with
+`invalid_configuration` (where an unread field would have produced `transport_failed`), and so does the same
+bad value arriving only from the provider. It needs no
 network: fixtures are restored from the local NuGet cache only. See
 [../addons/gd_feedback/README.md](../addons/gd_feedback/README.md).
 
@@ -83,8 +89,9 @@ python tests/godot-feedback-host/tools/sync_addon.py -Check   # the installed co
 ```
 
 Use it to check the things a compile cannot: that the main-thread hop through `CallDeferred` really emits the
-signals, and that `System.Net.Http` performs requests inside the Godot runtime. It is not part of
-`GameFeedback.slnx`; the addon's own `verify.py` remains the release gate.
+signals, that `System.Net.Http` performs requests inside the Godot runtime, and that the host's
+`feedback.tres` is really loaded and its `SteamAppId` really drives the `/g/{appId}` segment. It is
+not part of `GameFeedback.slnx`; the addon's own `verify.py` remains the release gate.
 
 ## Steam authentication
 

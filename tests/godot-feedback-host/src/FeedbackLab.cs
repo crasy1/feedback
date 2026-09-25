@@ -16,15 +16,11 @@ public partial class FeedbackLab : Control
     private const ulong SelfCheckBudgetMilliseconds = 20_000;
 
     /// <summary>
-    /// 默认指向本机 compose 栈（docker compose --env-file .env.local up -d --build → 127.0.0.1:3000）。
-    /// 用 dotnet run 起服务时改成 http://localhost:5087。
-    /// <para>
-    /// 这里<b>只填反馈服务的地址</b>：玩家 API 的 <c>/g/{appId}</c> 前缀由 <see cref="LabAppIdProvider"/>
-    /// 提供的 Steam AppID 自动补全（它读的就是 steamworks 那份 <c>SteamConfig.AppId</c>），
-    /// 所以接入时不需要手抄任何标识字符串。
-    /// </para>
+    /// 从宿主工程根部读出来的配置（<c>res://feedback.tres</c>，短名与 <c>res://feedback_config.tres</c> 等价）：
+    /// 服务地址与 Steam AppID 都在里面。界面只覆盖本机联调用的那几个字段
+    /// （见 <see cref="ApplyConfigFromUi"/>），AppID 不从界面改。
     /// </summary>
-    private const string DefaultBaseUrl = "http://127.0.0.1:3000";
+    private FeedbackConfig _config = null!;
 
     private FeedbackClient _client = null!;
     private bool _selfCheck;
@@ -49,6 +45,8 @@ public partial class FeedbackLab : Control
     public override void _Ready()
     {
         _selfCheck = Array.IndexOf(OS.GetCmdlineUserArgs(), SelfCheckArgument) >= 0;
+        // 服务地址与 Steam AppID 都来自这个文件：改了 .tres 就改了接入对象，不必碰代码。
+        _config = FeedbackConfig.Load();
 
         _client = new FeedbackClient { Name = "Feedback" };
         AddChild(_client);
@@ -65,6 +63,7 @@ public partial class FeedbackLab : Control
 
         BuildUi();
         Say("宿主测试台已就绪：先确认 BaseUrl，再选登录方式（调试登录 / Steam 出票 / 手输票据），然后点「登录」。");
+        Say($"配置来源：{DescribeConfigSource()}（BaseUrl={_config.BaseUrl}，SteamAppId={DescribeAppId()}）");
         Say(LabTicketProvider.Status());
     }
 
@@ -84,6 +83,14 @@ public partial class FeedbackLab : Control
 
     private void StartSelfCheck()
     {
+        // 阶段 0：宿主配置必须真的被读到，并且带着一个合法 AppID。
+        // 这是"AppID 由配置提供"这条接线唯一的直接证据——它决定请求会不会走在 /g/{appId}/ 下。
+        if (!IsValidAppId(_config.SteamAppId))
+        {
+            Finish(1, $"GD_FEEDBACK_LAB FAIL phase 0 {DescribeConfigSource()} must carry a numeric SteamAppId, got '{_config.SteamAppId}'");
+            return;
+        }
+
         _selfCheckPhase = 1;
         _client.Configure(OfflineConfig());
         _ = _client.SubmitAsync(new PlayerFeedbackDraft(PlayerFeedbackType.Bug, string.Empty, "self check"));
@@ -100,12 +107,35 @@ public partial class FeedbackLab : Control
         _ = _client.LoginAsync();
     }
 
-    private static FeedbackConfig OfflineConfig() => new()
+    /// <summary>
+    /// 在宿主配置（<c>res://feedback.tres</c>）的取值上只把地址换成保留端口 1（本机必然拒连），
+    /// 超时压到 1 秒。<c>SteamAppId</c> 刻意原样保留：阶段 2 要证明的正是它被真的用上了
+    /// （非法 AppID 会立刻以 <c>invalid_configuration</c> 失败，而不是走到网络）。
+    /// </summary>
+    private FeedbackConfig OfflineConfig()
     {
-        // 保留端口 1：本机必然拒连，且 1 秒超时把等待压到最短。
-        BaseUrl = "http://127.0.0.1:1",
-        RequestTimeoutSeconds = 1.0,
-    };
+        _config.BaseUrl = "http://127.0.0.1:1";
+        _config.RequestTimeoutSeconds = 1.0;
+        _config.AllowDebugLogin = false;
+        return _config;
+    }
+
+    /// <summary>与服务端 GameValidation 同口径：纯数字、最多 10 位、不能全 0。</summary>
+    private static bool IsValidAppId(string? candidate)
+    {
+        string trimmed = candidate?.Trim() ?? string.Empty;
+        return trimmed.Length is > 0 and <= 10
+            && trimmed.All(char.IsAsciiDigit)
+            && !trimmed.All(character => character == '0');
+    }
+
+    /// <summary>AppID 是公开的地址信息，不是秘密；但"没配"与"配错了"要一眼看得出来。</summary>
+    private string DescribeAppId() =>
+        IsValidAppId(_config.SteamAppId) ? _config.SteamAppId : $"(未配置或非法：'{_config.SteamAppId}')";
+
+    /// <summary>配置是哪个文件生效的：项目根可能有短名与长名两份，日志里必须说清楚读了哪一份。</summary>
+    private string DescribeConfigSource() =>
+        string.IsNullOrEmpty(_config.LoadedFromPath) ? "(没有配置文件，用内置默认值)" : _config.LoadedFromPath;
 
     private void Finish(int exitCode, string message)
     {
@@ -221,7 +251,8 @@ public partial class FeedbackLab : Control
         });
         root.AddChild(new HSeparator());
 
-        _baseUrl = new LineEdit { Text = DefaultBaseUrl, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _baseUrl = new LineEdit { Text = _config.BaseUrl, SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        _baseUrl.TooltipText = "默认取自 res://feedback.tres；这里改只影响本次运行，不回写文件";
         HBoxContainer baseRow = Row("BaseUrl");
         baseRow.AddChild(_baseUrl);
         root.AddChild(baseRow);
@@ -342,16 +373,16 @@ public partial class FeedbackLab : Control
             _ticket.Text.Trim(),
             LogFromBackground);
 
-        _client.Configure(new FeedbackConfig
-        {
-            BaseUrl = _baseUrl.Text.Trim(),
-            Identity = "feedback-api",
-            RequestTimeoutSeconds = 15.0,
-            AllowDebugLogin = _debugLogin.ButtonPressed,
-            DebugSteamId = _steamId.Text.Trim(),
-            CacheAccessToken = false,
-            VerboseLogging = true,
-        }, gameAppIdProvider: new LabAppIdProvider());
+        // 界面只覆盖本机联调的那几个字段；SteamAppId 留在 feedback.tres 里，不从界面改
+        // （CacheMode.Ignore 加载，改内存里的实例不会回写磁盘）。
+        _config.BaseUrl = _baseUrl.Text.Trim();
+        _config.Identity = "feedback-api";
+        _config.RequestTimeoutSeconds = 15.0;
+        _config.AllowDebugLogin = _debugLogin.ButtonPressed;
+        _config.DebugSteamId = _steamId.Text.Trim();
+        _config.CacheAccessToken = false;
+        _config.VerboseLogging = true;
+        _client.Configure(_config);
     }
 
     /// <summary>provider 可能在后台线程被调用，日志必须经 CallDeferred 回到主线程再写节点。</summary>

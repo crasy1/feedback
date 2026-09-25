@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="FeedbackConfig" format=3 uid="uid://do4u7wtgymiky"]
+
+[ext_resource type="Script" uid="uid://bqd27skhxpe4r" path="res://addons/gd_feedback/FeedbackConfig.cs" id="1_4grkw"]
+
+[resource]
+script = ExtResource("1_4grkw")
+BaseUrl = "https://feedback.jwt.dpdns.org"
+SteamAppId = "1910980"
+metadata/_custom_type_script = "uid://bqd27skhxpe4r"

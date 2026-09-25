@@ -20,13 +20,18 @@ A path segment that is not all digits resolves to no Game at all (`GameResolver`
 
 ## Client integration
 
-The base URL **no longer carries a Game identifier**. `FeedbackConfig.BaseUrl` is just the feedback service address (`https://feedback.example.com`); the addon appends `/g/{appId}` itself (addon version 1.3.0).
+The base URL **no longer carries a Game identifier**. `FeedbackConfig.BaseUrl` is just the feedback service address (`https://feedback.example.com`); the addon appends `/g/{appId}` itself (addon version 1.4.0).
 
-The AppID comes from the host, through the optional interface `IGameAppIdProvider` (`addons/gd_feedback/FeedbackAbstractions.cs`), whose null-object default is `UnavailableGameAppIdProvider`. The host returns the AppID the game is running as — the same value it already passes to `SteamClient.Init`. The addon does not read Steam itself: ADR-0004 keeps its core engine-free and dependency-free, which is why the value must be injected.
+The AppID comes from one of two places, and the addon takes the first that is present (addon version 1.4.0):
 
-- Host implements the provider and returns a numeric AppID (digits only, at most 10 characters) → the addon appends `/g/{appId}` to `BaseUrl`.
-- Host does not implement it, or returns `null`/blank → the addon uses `BaseUrl` verbatim, so a base URL that already contains a path keeps working unchanged.
-- Host returns something that is not a numeric AppID (digits only, at most 10 characters — a slug, by mistake) → the addon fails closed with its own `invalid_configuration` and sends **no** request.
+1. **`SteamAppId` in the host's config resource** (`res://feedback_config.tres`, or the project-root short name `res://feedback.tres`) — an exported field of `FeedbackConfig`, editable in the Godot Inspector. A host that has no C# glue (GDScript-driven projects, most notably) can be addressable with this alone.
+2. **`IGameAppIdProvider`** (`addons/gd_feedback/FeedbackAbstractions.cs`), the optional C# interface whose null-object default is `UnavailableGameAppIdProvider`. The host returns the AppID the game is running as — the same value it already passes to `SteamClient.Init`. This stays the recommended source when the AppID is only known at runtime: a value copied into a `.tres` is a value that can go stale in a shipped build (ADR-0007).
+
+Either way the addon does not read Steam itself: ADR-0004 keeps its core engine-free and dependency-free, which is why the value must be supplied by the host.
+
+- A source yields a numeric AppID (digits only, at most 10 characters) → the addon appends `/g/{appId}` to `BaseUrl`.
+- Neither source is configured, or the provider returns `null`/blank → the addon uses `BaseUrl` verbatim, so a base URL that already contains a path keeps working unchanged.
+- A source yields something that is not a numeric AppID (digits only, at most 10 characters — a slug, by mistake, or all zeros) → the addon fails closed with its own `invalid_configuration` and sends **no** request. A configured `SteamAppId` wins over the provider when both are set.
 
 The AppID is a client-supplied *address*, not a client-supplied *identity*: the server resolves it against `games.SteamAppId` and decides everything else from its own database. A client-supplied `gameId` or AppID in a request body is still ignored.
 

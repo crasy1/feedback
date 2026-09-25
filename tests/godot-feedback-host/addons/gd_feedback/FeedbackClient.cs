@@ -40,8 +40,14 @@ public partial class FeedbackClient : Node
     public ITicketProvider TicketProvider { get; set; } = UnavailableTicketProvider.Instance;
 
     /// <summary>
-    /// 当前游戏运行的 Steam AppID 来源。宿主实现了它，插件就自动把玩家 API 的路径补成
-    /// <c>/g/{appId}/api/...</c>，接入方不必手抄标识；不实现则沿用"BaseUrl 里自带路径"的老行为。
+    /// 当前游戏运行的 Steam AppID 来源（可选）。插件按"<see cref="FeedbackConfig.SteamAppId"/> →
+    /// 这里 → BaseUrl 自带路径"的顺序取 AppID：配置里填了就以配置为准，没填才问这个实现。
+    /// <para>
+    /// 宿主本来就在用同一个值调 <c>SteamClient.Init</c>，所以实现它是零成本的；只有在配置里
+    /// 写死一个 AppID 不方便（例如同一份构建要在多个 AppID 下跑）时才更需要它。
+    /// 未注入时登录会得到 <c>ticket_unavailable</c>（缺 AppID 则是 <c>invalid_configuration</c>），
+    /// 不会退回任何"看起来成功"的路径。
+    /// </para>
     /// </summary>
     public IGameAppIdProvider GameAppIdProvider { get; set; } = UnavailableGameAppIdProvider.Instance;
 
@@ -213,7 +219,7 @@ public partial class FeedbackClient : Node
             new GodotFeedbackLog(_config.VerboseLogging),
             messageHandler: null,
             timeProvider: null,
-            gameAppIdProvider: GameAppIdProvider);
+            gameAppIdProvider: new ConfiguredGameAppIdProvider(_config.SteamAppId, GameAppIdProvider));
         return _runtime;
     }
 

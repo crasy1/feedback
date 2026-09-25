@@ -66,6 +66,8 @@ internal static class Program
         await Run("a host-provided AppID completes the /g/{appId} path", AppIdProviderCompletesGamePathAsync);
         await Run("a non-numeric AppID fails closed without a request", NonNumericAppIdFailsClosedAsync);
         await Run("an all-zero AppID fails closed without a request", AllZeroAppIdFailsClosedAsync);
+        await Run("a configured AppID beats the host provider", ConfiguredAppIdBeatsProviderAsync);
+        await Run("a blank configured AppID falls back to the host provider", BlankConfiguredAppIdFallsBackAsync);
         await Run("cancellation surfaces instead of turning into a transport failure", CancellationSurfacesAsync);
 
         Console.WriteLine($"HARNESS SUMMARY checks={_checks} failed={Failures.Count}");
@@ -836,7 +838,47 @@ internal static class Program
         return Task.CompletedTask;
     }
 
-    private static async Task CancellationSurfacesAsync()    {
+    /// <summary>
+    /// 配置里写了 AppID（也就是宿主配置资源 <c>feedback_config.tres</c> / <c>feedback.tres</c> 的 <c>SteamAppId</c>）就以它为准，
+    /// 即使宿主同时也注入了来源。顺序写死在这里，README 里也是这么写的。
+    /// </summary>
+    private static Task ConfiguredAppIdBeatsProviderAsync()
+    {
+        StubHandler handler = new();
+        handler.RespondJson(HttpStatusCode.OK, LoginJson("token-configured-appid"));
+        handler.RespondJson(HttpStatusCode.OK, "[]");
+        using FeedbackRuntime runtime = Runtime(
+            handler,
+            appIds: new ConfiguredGameAppIdProvider(" 1910980 ", new StubAppIdProvider("480")));
+
+        runtime.ListMineAsync().GetAwaiter().GetResult();
+
+        Check(
+            handler.Requests[0].Path == "/g/1910980/api/auth/steam",
+            $"a configured AppID must win over the host provider, got {handler.Requests[0].Path}");
+        return Task.CompletedTask;
+    }
+
+    /// <summary>配置留空是"没配"而不是"空 AppID"：这时才问宿主注入的来源。</summary>
+    private static Task BlankConfiguredAppIdFallsBackAsync()
+    {
+        StubHandler handler = new();
+        handler.RespondJson(HttpStatusCode.OK, LoginJson("token-provider-appid"));
+        handler.RespondJson(HttpStatusCode.OK, "[]");
+        using FeedbackRuntime runtime = Runtime(
+            handler,
+            appIds: new ConfiguredGameAppIdProvider("   ", new StubAppIdProvider("1910980")));
+
+        runtime.ListMineAsync().GetAwaiter().GetResult();
+
+        Check(
+            handler.Requests[0].Path == "/g/1910980/api/auth/steam",
+            $"a blank configured AppID must fall back to the host provider, got {handler.Requests[0].Path}");
+        return Task.CompletedTask;
+    }
+
+    private static async Task CancellationSurfacesAsync()
+    {
         StubHandler handler = new();
         using FeedbackRuntime runtime = Runtime(handler);
         using CancellationTokenSource cancellation = new();

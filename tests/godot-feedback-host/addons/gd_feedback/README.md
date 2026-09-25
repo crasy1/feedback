@@ -1,4 +1,4 @@
-# GD Feedback 1.3.0
+# GD Feedback 1.4.0
 
 Steam 玩家反馈客户端（Godot 4.7 / .NET 10 插件）：玩家用 Steam 票据登录，提交反馈与评论，读取自己的反馈历史。
 它对接的是 [Steam Game Feedback System](../../README.md) 的玩家 API（契约见 [docs/specs/player-api.md](../../docs/specs/player-api.md)）。
@@ -55,11 +55,18 @@ public sealed class SteamTicketProvider : ITicketProvider
 }
 ```
 
-还要把**当前游戏运行的 Steam AppID** 交给插件（同样是宿主的事，因为插件不引用 Steam）。
-给了它，插件就会自动把请求路径补成 `/g/{appId}/api/...`，于是 `BaseUrl` 只填服务地址，
-接入时**不需要手抄任何标识字符串**：
+玩家 API 的路径是 `/g/{appId}/api/...`，这个 Steam AppID 有**两条来路，填一条就够**：
+
+1. **`feedback_config.tres` 里的 `SteamAppId`**（推荐，最省事）——在 Godot 的 Inspector 里填，
+   一行 C# 都不用写；GDScript 宿主也只有这条可走。给了它，插件就把请求路径补成
+   `/g/{appId}/api/...`，于是 `BaseUrl` 只填服务地址，接入时**不需要手抄任何标识字符串**。
+2. 宿主注入 `IGameAppIdProvider`——值要**运行时**才知道时用它（例如同一份构建要在多个 AppID 下跑）。
+
+两个都填**以配置为准**，配置留空才问 provider。两个都没有时插件原样使用 `BaseUrl`，
+你需要自己把 `/g/{appId}` 写进 `BaseUrl`（老接法，照旧可用）。
 
 ```csharp
+using System.Globalization;
 using GdFeedback;
 
 /// <summary>把当前游戏运行的 Steam AppID 交给插件；本项目本来就在用它调 SteamClient.Init。</summary>
@@ -67,9 +74,13 @@ public sealed class SteamAppIdProvider : IGameAppIdProvider
 {
 	public string? GetSteamAppId() => SteamClient.AppId.ToString(CultureInfo.InvariantCulture);
 }
+
+feedback.GameAppIdProvider = new SteamAppIdProvider();   // 同时把 .tres 里的 SteamAppId 留空
 ```
 
-不实现它也能用：那时插件原样使用 `BaseUrl`，你需要自己把 `/g/{appId}` 写进 `BaseUrl`。
+> 写进 `.tres` 等于把标识抄进配置：构建一旦发出去就改不了。如果这个 AppID 有可能变
+> （典型场景：playtest 构建转正式包），就把它留在 `.tres` 之外，改用 provider —— 那时
+> 路径跟着进程实际运行的 AppID 走。
 
 C# 调用：
 
@@ -153,12 +164,32 @@ func submit_and_wait() -> void:
 配置是 `FeedbackConfig`（继承 `Resource`，`[GlobalClass]`），按顺序查找：
 
 1. `res://feedback_config.tres` —— **宿主自己的文件，推荐放这里**（升级插件不会覆盖它）
-2. `res://addons/gd_feedback/feedback_config.tres` —— 插件目录内兜底（插件不附带此文件，按需自建）
-3. 内置默认值（`http://localhost:5087`，identity `feedback-api`）
+2. `res://feedback.tres` —— 项目根下的短名，内容完全同型，等价可用（两个都在时以 1 为准）
+3. `res://addons/gd_feedback/feedback_config.tres` —— 插件目录内兜底（插件不附带此文件，按需自建）
+4. 内置默认值（`http://localhost:5087`，identity `feedback-api`）
+
+不确定到底读了哪一份时，看 `FeedbackConfig.LoadedFromPath`（插件启动时的那行日志会带上它）。
+
+接入一个游戏要改的就是这个文件里的两行——服务地址与 Steam AppID：
+
+```ini
+[gd_resource type="Resource" script_class="FeedbackConfig" format=3]
+
+[ext_resource type="Script" path="res://addons/gd_feedback/FeedbackConfig.cs" id="1_config"]
+
+[resource]
+script = ExtResource("1_config")
+BaseUrl = "https://feedback.example.com"
+SteamAppId = "1910980"
+```
+
+（在 Inspector 里新建一个 `FeedbackConfig` 资源、填好两个值、存到项目根即可；也可以直接照抄
+`tests/godot-feedback-host/feedback.tres`。）
 
 | 属性 | 默认 | 说明 |
 |---|---|---|
-| `BaseUrl` | `http://localhost:5087` | 反馈服务地址，必须是绝对的 http/https。**只填服务地址**：`/g/{appId}` 前缀由宿主的 `IGameAppIdProvider` 自动补全 |
+| `BaseUrl` | `http://localhost:5087` | 反馈服务地址，必须是绝对的 http/https。**只填服务地址**：`/g/{appId}` 前缀由 `SteamAppId`（或宿主的 `IGameAppIdProvider`）自动补全 |
+| `SteamAppId` | 空 | 本游戏运行的 Steam AppID（纯数字、最多 10 位、不能全 0）。**填了就由它决定 `/g/{appId}` 路径段** |
 | `Identity` | `feedback-api` | 票据 identity，**必须与后台里该游戏配置的票据 identity 一致**（默认就是 `feedback-api`） |
 | `RequestTimeoutSeconds` | `15` | 单请求超时 |
 | `AllowDebugLogin` | `false` | 调试登录开关；服务端对应开关只在 Development 生效 |
@@ -166,6 +197,18 @@ func submit_and_wait() -> void:
 | `Proxy` | 空 | 显式代理；空表示 .NET 默认策略 |
 | `CacheAccessToken` | `false` | 是否把访问令牌写入 `user://gd_feedback/token.json` |
 | `VerboseLogging` | `false` | 是否打印 Info 级日志（Warning/Error 始终打印） |
+
+AppID 的取值顺序（三个来源只用得上一个）：
+
+1. `SteamAppId` 非空 → 用它。值是坏的（含非数字、超 10 位、全 0）时**本地就以
+   `invalid_configuration` 失败，一个请求都不会发出**——这比拼出一个必然 404 的路径好查得多。
+2. `SteamAppId` 为空 → 问宿主注入的 `IGameAppIdProvider`。
+3. 两者都没有 → 原样使用 `BaseUrl`（老接法，需要自己写 `/g/{appId}`）。
+
+> 同一个 AppID 常常还有第二个落脚点：宿主用它调 `SteamClient.Init`（在 `arena` 那类工程里是
+> steamworks 插件的 `SteamConfig.tres`）。两处都手抄就意味着两处都可能不一致，而且不一致时
+> 服务端只会回一个 `game_not_found`。想避开这件事就把 `.tres` 里的 `SteamAppId` 留空，
+> 改用 provider 读那个唯一的真相。
 
 本机开发时不想改 `.tres`，可以用 EditorSettings 覆盖 BaseUrl（不回写项目、不进版本库；只在编辑器与编辑器运行时生效）：
 
@@ -241,16 +284,19 @@ void                                        Configure(FeedbackConfig config = nu
 - 令牌默认**只在内存**；`CacheAccessToken` 打开才写 `user://`，`ClearSessionAsync()` 会删除。
 - 调试登录默认关闭，且只接受合法的 17 位 SteamID64；服务端侧的对应开关只在 Development 生效。
 - 出票失败一律 fail closed：宁可报 `ticket_unavailable`，也不降级成匿名或"看起来成功"。
+- `SteamAppId` 只是**地址**，不是身份：它决定服务端解析哪个 Game，服务端仍拿自己的
+  `games.SteamAppId` 与票据里 Steam 报出的 AppID 对照。填错（甚至填成别人的 AppID）只会得到
+  `game_not_found` 或验票被拒，换不来任何权限。
 - 所有权（只能读写自己的反馈）由服务端强制；插件把 404 原样上报为 `not_found`，不区分"不存在"与"不属于你"。
-- 分发时要提醒玩家：程序集可被反编译，**不要把任何长期密钥放进游戏**。本插件不含长期密钥。
+- 分发时要提醒玩家：程序集可被反编译，**不要把任何长期密钥放进游戏**。本插件不含长期密钥，`SteamAppId` 也不是秘密。
 
 ## 所有权表
 
 | 内容 | 所有者 |
 |---|---|
 | 玩家 API 契约、所有权、限流、状态与回复 | 服务端（本仓库） |
-| Steam 初始化、AppId、票据获取与释放 | **宿主**（插件不引用 Steam） |
-| `res://feedback_config.tres` 的实际取值（生产 BaseUrl 等） | 宿主 |
+| Steam 初始化、票据获取与释放 | **宿主**（插件不引用 Steam） |
+| 宿主自己的配置资源（`res://feedback_config.tres` 或短名 `res://feedback.tres`）的实际取值（生产 BaseUrl、SteamAppId） | 宿主 |
 | 反馈表单 UI、本地化、错误码到文案的映射 | 宿主 |
 | 传输、JSON、本地校验、令牌缓存、重试与错误码 | 本插件 |
 | Godot 适配器（`Node`、信号、`CallDeferred` 回主线程） | 本插件 |
@@ -263,8 +309,9 @@ python addons/gd_feedback/tests/verify.py
 ```
 
 离线运行，不需要 Godot 游戏工程；四个阶段：身份与白名单、核心引擎无关性、纯 .NET 干净宿主 fixture + harness
-（30+ 条断言，含"校验先于网络""缺票 fail closed""日志不含令牌""401 只重登一次"等），以及 Godot 宿主 fixture 的
-Debug/Release 严格构建（`TreatWarningsAsErrors=true`，0 warning）。需要引擎内探针时再补 `-GodotPath`：
+（含"校验先于网络""缺票 fail closed""日志不含令牌""401 只重登一次""配置里的 AppID 压过宿主注入"等），以及 Godot 宿主 fixture 的
+Debug/Release 严格构建（`TreatWarningsAsErrors=true`，0 warning）。需要引擎内探针时再补 `-GodotPath`
+（探针额外验证 `FeedbackConfig.SteamAppId` 与 provider 两条来源在引擎内都真的参与路径推导）：
 
 ```powershell
 python addons/gd_feedback/tests/verify.py --godot-path D:\Scoop\apps\godot-mono\current\godot-mono.exe
@@ -273,7 +320,7 @@ python addons/gd_feedback/tests/verify.py --godot-path D:\Scoop\apps\godot-mono\
 打包（按 `addon.manifest.json` 白名单，并断言归档内容与白名单逐项一致）：
 
 ```powershell
-python addons/gd_feedback/tools/package.py                 # 输出到 <repo>/artifacts/gd_feedback-1.0.0.zip
+python addons/gd_feedback/tools/package.py                 # 输出到 <repo>/artifacts/gd_feedback-1.4.0.zip
 python addons/gd_feedback/tools/package.py --verify-only      # 只校验身份与白名单
 ```
 
@@ -281,11 +328,13 @@ python addons/gd_feedback/tools/package.py --verify-only      # 只校验身份�
 
 1. 复制（或解压归档）`addons/gd_feedback/` 到目标项目的 `addons/` 下。
 2. `dotnet build`，然后在 Project Settings → Plugins 启用。
-3. 在目标项目根建 `feedback_config.tres`（`FeedbackConfig` 资源），填生产 `BaseUrl`（只填服务地址）。
+3. 在目标项目根建配置资源：填生产 `BaseUrl`（只填服务地址）与 `SteamAppId`（本游戏运行的 AppID）。
+   文件名用 `feedback_config.tres`（文档推荐）或 `feedback.tres` 都行，内容一样；可以直接照抄
+   `tests/godot-feedback-host/feedback.tres`。
 4. 在宿主里实现 `ITicketProvider`（Steam 出票）并赋给 `FeedbackClient.TicketProvider`。
-5. 在宿主里实现 `IGameAppIdProvider`（返回当前游戏运行的 Steam AppID）并赋给
-   `FeedbackClient.GameAppIdProvider`——玩家 API 的 `/g/{appId}` 前缀由插件自动补全，
-   接入方不必手抄标识字符串。宿主本来就在用同一个值调 `SteamClient.Init`。
+5. 只有 AppID 要**运行时**才确定时才多做一步：实现 `IGameAppIdProvider` 并赋给
+   `FeedbackClient.GameAppIdProvider`，同时把第 3 步的 `SteamAppId` 留空（两个都填以配置为准）。
+   宿主本来就在用同一个值调 `SteamClient.Init`，实现它就是两行。
 
 本插件的权威定义在服务端仓库：`CONTEXT.md`（术语）、`docs/adr/0004-godot-feedback-client-addon.md`（决定与取舍）。
 
@@ -304,6 +353,6 @@ _Avoid_: JWT、session、API key
 
 该仓库还需要自行完成（本插件不代劳）：启用插件、把 `GdFeedback` Autoload 指向宿主的票据提供者、
 把 `FeedbackConfig.BaseUrl` 指向 `https://<反馈服务域名>`（**不要**带 `/g/...`，那段由
-`IGameAppIdProvider` 交出的 AppID 自动补全）、
+`FeedbackConfig.SteamAppId` 或 `IGameAppIdProvider` 交出的 AppID 自动补全）、
 在 `project.godot` 里确认 `Steam` 使用**正式 AppId**（不是 480 测试 App，且要与后台里该游戏配置的 Steam AppID 一致），
 并为新增的场景更新该仓库的场景目录文档。

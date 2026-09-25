@@ -85,7 +85,9 @@ Steam 的凭据、AppID 与票据 identity **不在环境变量里**，而是按
 3. 先在 **Steam 凭据** 页添加 Publisher Web API Key（密文入库、界面不回显；保存后点「验证」确认可用），
    再回到 **游戏** 页填写名称、**Steam AppID**、票据 identity 并选中这份凭据（AppID 就是玩家 API 的路径段）。
 4. 把该游戏客户端构建的 `FeedbackConfig.BaseUrl` 指向 `https://<域名>`（**不要**带 `/g/...`），
-   并在宿主里实现 `IGameAppIdProvider` 交出当前运行的 Steam AppID——路径前缀由插件自动补全。
+   并在配置文件（`feedback_config.tres`，或项目根下的短名 `feedback.tres`）里填上该游戏的
+   **Steam AppID**——路径前缀由插件自动补全。
+   （AppID 只在运行时才确定时，改成在宿主里实现 `IGameAppIdProvider`，并把配置里的值留空。）
 
 备份时**必须一并备份 Data Protection key ring 卷**（compose 里的 `data-protection-keys`）：
 丢了它，数据库里已存的 Steam 凭据将永久无法解密。
@@ -130,7 +132,8 @@ POST /g/{appId}/api/feedback/{id}/comments 追加评论（仅限反馈属主）
 访问令牌里带 `game` 声明：一个游戏里换来的令牌拿到另一个游戏的路径下使用会被拒（`401 game_mismatch`）。
 
 详细契约与错误码：[docs/specs/player-api.md](docs/specs/player-api.md)。Godot 客户端把 `FeedbackConfig.BaseUrl`
-指向反馈服务地址（**不带** `/g/...`），宿主通过 `IGameAppIdProvider` 交出当前运行的 Steam AppID，
+指向反馈服务地址（**不带** `/g/...`），AppID 由配置资源（`feedback_config.tres` / `feedback.tres`）的 `SteamAppId` 提供
+（AppID 只在运行时才确定时改用 `IGameAppIdProvider` 注入），
 插件自动补全路径；再用 `GetAuthTicketForWebApi(identity)` 取票据（默认 identity 为 `feedback-api`）。
 
 ## Godot 客户端插件
